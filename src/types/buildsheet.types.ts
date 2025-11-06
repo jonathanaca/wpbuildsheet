@@ -1,5 +1,5 @@
 // Tab 1: Organization (Org)
-export interface OrgData {
+export interface BuildingData {
   buildingName: string;
   country: string;
   city: string;
@@ -10,7 +10,13 @@ export interface OrgData {
   hasCatering: boolean;
 }
 
-export type OrgDataArray = OrgData[];
+export interface OrgData {
+  organizationName: string;
+  buildings: BuildingData[];
+}
+
+// Backward compatibility
+export type OrgDataArray = BuildingData[];
 
 // Tab 2: Interfaces
 export interface InterfaceFeature {
@@ -272,7 +278,7 @@ export interface VisitorKioskInduction {
 
 // Complete Store State
 export interface BuildSheetState {
-  org: OrgDataArray;
+  org: OrgData;
   interfaces: InterfacesData;
   interactiveMaps: InteractiveMapsChecklist;
   zones: ZonesDataArray;

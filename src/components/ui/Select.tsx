@@ -10,19 +10,21 @@ interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ label, error, helperText, options, className = '', ...props }, ref) => {
     const selectClasses = `
-      w-full px-3 py-2 border rounded-md shadow-sm
-      focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
-      disabled:bg-gray-100 disabled:cursor-not-allowed
-      ${error ? 'border-danger focus:ring-danger focus:border-danger' : 'border-gray-300'}
+      w-full px-4 py-2.5 rounded-xl glass
+      focus:outline-none focus:ring-2 focus:ring-primary dark:focus:ring-electric-cyan focus:border-transparent
+      disabled:opacity-50 disabled:cursor-not-allowed
+      transition-all duration-300
+      text-gray-900 dark:text-white
+      ${error ? 'ring-2 ring-danger focus:ring-danger' : 'border-primary/20 dark:border-electric-cyan/20'}
       ${className}
     `;
 
     return (
       <div className="w-full">
         {label && (
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-semibold mb-2 text-primary-700 dark:text-electric-cyan">
             {label}
-            {props.required && <span className="text-danger ml-1">*</span>}
+            {props.required && <span className="text-electric-rose ml-1">*</span>}
           </label>
         )}
         <select ref={ref} className={selectClasses} {...props}>
@@ -34,10 +36,10 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           ))}
         </select>
         {error && (
-          <p className="mt-1 text-sm text-danger">{error}</p>
+          <p className="mt-1.5 text-sm text-electric-rose font-medium">{error}</p>
         )}
         {helperText && !error && (
-          <p className="mt-1 text-sm text-gray-500">{helperText}</p>
+          <p className="mt-1.5 text-sm text-gray-600 dark:text-gray-400">{helperText}</p>
         )}
       </div>
     );

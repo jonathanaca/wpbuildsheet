@@ -5,8 +5,8 @@ export const exportToExcel = (data: BuildSheetState): void => {
   const workbook = XLSX.utils.book_new();
 
   // Tab 1: Org
-  if (data.org.length > 0) {
-    const orgSheet = XLSX.utils.json_to_sheet(data.org);
+  if (data.org.buildings.length > 0) {
+    const orgSheet = XLSX.utils.json_to_sheet(data.org.buildings);
     XLSX.utils.book_append_sheet(workbook, orgSheet, 'Org');
   }
 

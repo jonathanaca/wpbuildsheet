@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type {
   BuildSheetState,
-  OrgDataArray,
+  OrgData,
   InterfacesData,
   InteractiveMapsChecklist,
   ZonesDataArray,
@@ -30,7 +30,7 @@ interface BuildSheetStore extends BuildSheetState {
   setActiveTab: (tab: TabName) => void;
 
   // Update methods for each tab
-  updateOrg: (data: OrgDataArray) => void;
+  updateOrg: (data: OrgData) => void;
   updateInterfaces: (data: InterfacesData) => void;
   updateInteractiveMaps: (data: InteractiveMapsChecklist) => void;
   updateZones: (data: ZonesDataArray) => void;
@@ -61,7 +61,10 @@ interface BuildSheetStore extends BuildSheetState {
 
 // Initial state
 const initialState: BuildSheetState = {
-  org: [],
+  org: {
+    organizationName: '',
+    buildings: [],
+  },
   interfaces: {
     buildings: [],
     features: [
@@ -139,8 +142,8 @@ export const useBuildSheetStore = create<BuildSheetStore>()(
 
       setActiveTab: (tab: TabName) => set({ activeTab: tab }),
 
-      updateOrg: (data: OrgDataArray) => {
-        const buildings = data.map(d => d.buildingName);
+      updateOrg: (data: OrgData) => {
+        const buildings = data.buildings.map(d => d.buildingName);
         const currentInterfaces = get().interfaces;
 
         // Update buildings in interfaces and initialize enabled state for new buildings
@@ -220,7 +223,10 @@ export const useBuildSheetStore = create<BuildSheetStore>()(
         if (Array.isArray(data)) {
           return data.length > 0 ? 100 : 0;
         } else if (typeof data === 'object' && data !== null) {
-          if (tabName === 'interfaces') {
+          if (tabName === 'org') {
+            const orgData = data as OrgData;
+            return orgData.organizationName && orgData.buildings.length > 0 ? 100 : 0;
+          } else if (tabName === 'interfaces') {
             return (data as InterfacesData).buildings.length > 0 ? 100 : 0;
           } else if (tabName === 'interactiveMaps') {
             const maps = data as InteractiveMapsChecklist;

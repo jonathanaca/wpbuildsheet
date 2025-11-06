@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { useBuildSheetStore } from './store/buildsheet.store';
 import { Header } from './components/layout/Header';
 import { TabNavigation } from './components/layout/TabNavigation';
@@ -28,7 +29,7 @@ import { SecurityAccessForm } from './components/forms/SecurityAccessForm';
 import { EmailCustomWordingForm } from './components/forms/EmailCustomWordingForm';
 import { VisitorKioskInductionForm } from './components/forms/VisitorKioskInductionForm';
 
-function App() {
+const App = () => {
   const activeTab = useBuildSheetStore((state) => state.activeTab);
   const exportData = useBuildSheetStore((state) => state.exportData);
   const importData = useBuildSheetStore((state) => state.importData);
@@ -142,77 +143,79 @@ function App() {
   const overallCompletion = getOverallCompletion();
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header
-        onExportExcel={handleExportExcel}
-        onExportJSON={handleExportJSON}
-        onImport={handleImport}
-        onClear={handleClear}
-        onSave={handleSave}
-      />
+    <ThemeProvider>
+      <div className="min-h-screen transition-colors duration-300">
+        <Header
+          onExportExcel={handleExportExcel}
+          onExportJSON={handleExportJSON}
+          onImport={handleImport}
+          onClear={handleClear}
+          onSave={handleSave}
+        />
 
-      <TabNavigation />
+        <TabNavigation />
 
-      <div className="container mx-auto px-4 py-6">
-        <div className="mb-6">
-          <ProgressIndicator
-            progress={overallCompletion}
-            label="Overall Completion"
-            showPercentage
-          />
+        <div className="container mx-auto px-6 py-8">
+          <div className="mb-8 animate-slide-down">
+            <ProgressIndicator
+              progress={overallCompletion}
+              label="Overall Completion"
+              showPercentage
+            />
+          </div>
+
+          <div className="glass-strong rounded-2xl shadow-glass dark:shadow-glass-dark border border-primary/10 dark:border-electric-cyan/10 p-8 animate-fade-in">
+            {renderForm()}
+          </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          {renderForm()}
-        </div>
-      </div>
+        {/* Clear Confirmation Modal */}
+        <Modal
+          isOpen={showClearModal}
+          onClose={() => setShowClearModal(false)}
+          title="Clear All Data"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setShowClearModal(false)}>
+                Cancel
+              </Button>
+              <Button variant="danger" onClick={confirmClear}>
+                Clear All Data
+              </Button>
+            </>
+          }
+        >
+          <p className="text-gray-700 dark:text-gray-300">
+            Are you sure you want to clear all data? This action cannot be undone.
+          </p>
+        </Modal>
 
-      {/* Clear Confirmation Modal */}
-      <Modal
-        isOpen={showClearModal}
-        onClose={() => setShowClearModal(false)}
-        title="Clear All Data"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setShowClearModal(false)}>
+        {/* Import Modal */}
+        <Modal
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          title="Import Data"
+          footer={
+            <Button variant="secondary" onClick={() => setShowImportModal(false)}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={confirmClear}>
-              Clear All Data
-            </Button>
-          </>
-        }
-      >
-        <p className="text-gray-700">
-          Are you sure you want to clear all data? This action cannot be undone.
-        </p>
-      </Modal>
-
-      {/* Import Modal */}
-      <Modal
-        isOpen={showImportModal}
-        onClose={() => setShowImportModal(false)}
-        title="Import Data"
-        footer={
-          <Button variant="secondary" onClick={() => setShowImportModal(false)}>
-            Cancel
-          </Button>
-        }
-      >
-        <div className="space-y-4">
-          <p className="text-gray-700">
-            Select a JSON or Excel file to import. This will overwrite existing data with the imported data.
-          </p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json,.xlsx,.xls"
-            onChange={handleFileSelect}
-            className="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none"
-          />
-        </div>
-      </Modal>
-    </div>
+          }
+        >
+          <div className="space-y-4">
+            <p className="text-gray-700 dark:text-gray-300">
+              Select a JSON or Excel file to import. This will overwrite existing data with the imported data.
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,.xlsx,.xls"
+              onChange={handleFileSelect}
+              className="block w-full text-sm text-gray-900 dark:text-gray-100 border border-primary/20 dark:border-electric-cyan/20 rounded-xl cursor-pointer glass focus:outline-none focus:ring-2 focus:ring-primary dark:focus:ring-electric-cyan p-2"
+            />
+          </div>
+        </Modal>
+      </div>
+    </ThemeProvider>
   );
 }
 

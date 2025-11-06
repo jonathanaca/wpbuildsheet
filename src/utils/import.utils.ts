@@ -33,7 +33,11 @@ export const importFromExcel = (file: File): Promise<Partial<BuildSheetState>> =
 
         // Parse each sheet
         if (workbook.Sheets['Org']) {
-          importedData.org = XLSX.utils.sheet_to_json(workbook.Sheets['Org']);
+          const buildings = XLSX.utils.sheet_to_json(workbook.Sheets['Org']);
+          importedData.org = {
+            organizationName: '',
+            buildings: buildings as any,
+          };
         }
 
         if (workbook.Sheets['Zones']) {
