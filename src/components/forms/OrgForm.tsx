@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
-import { Plus, Trash2, CheckCircle } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { Plus, Edit2, Trash2, CheckCircle, X, Check } from 'lucide-react';
 import { useBuildSheetStore } from '../../store/buildsheet.store';
 import type { OrgData, BuildingData } from '../../types/buildsheet.types';
 import { CURRENCIES } from '../../types/buildsheet.types';
@@ -14,28 +14,95 @@ export const OrgForm: React.FC = () => {
   const org = useBuildSheetStore((state) => state.org);
   const updateOrg = useBuildSheetStore((state) => state.updateOrg);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
+  // Form for organization name
   const {
-    register,
-    control,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<OrgData>({
+    register: registerOrg,
+    handleSubmit: handleSubmitOrg,
+    formState: { errors: orgErrors },
+  } = useForm<{ organizationName: string }>({
     defaultValues: {
       organizationName: org.organizationName || '',
-      buildings: org.buildings.length > 0 ? org.buildings : [getEmptyBuilding()],
     },
   });
 
-  const { fields, append, remove } = useFieldArray({
-    control,
-    name: 'buildings',
+  // Form for adding/editing buildings
+  const {
+    register: registerBuilding,
+    handleSubmit: handleSubmitBuilding,
+    formState: { errors: buildingErrors },
+    reset,
+    setValue,
+  } = useForm<BuildingData>({
+    defaultValues: getEmptyBuilding(),
   });
 
-  const onSubmit = (data: OrgData) => {
-    updateOrg(data);
+  const onSubmitOrg = (data: { organizationName: string }) => {
+    updateOrg({
+      ...org,
+      organizationName: data.organizationName,
+    });
+    showSuccess();
+  };
 
-    // Show success message
+  const onSubmitBuilding = (data: BuildingData) => {
+    const newBuildings = [...org.buildings];
+
+    if (editingIndex !== null) {
+      // Update existing building
+      newBuildings[editingIndex] = data;
+      setEditingIndex(null);
+    } else {
+      // Add new building
+      newBuildings.push(data);
+    }
+
+    updateOrg({
+      ...org,
+      buildings: newBuildings,
+    });
+
+    reset(getEmptyBuilding());
+    showSuccess();
+  };
+
+  const handleEdit = (index: number) => {
+    const building = org.buildings[index];
+    setEditingIndex(index);
+
+    // Populate form with building data
+    Object.keys(building).forEach((key) => {
+      setValue(key as keyof BuildingData, building[key as keyof BuildingData]);
+    });
+
+    // Scroll to form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingIndex(null);
+    reset(getEmptyBuilding());
+  };
+
+  const handleDelete = (index: number) => {
+    if (confirm('Are you sure you want to delete this building?')) {
+      const newBuildings = org.buildings.filter((_, i) => i !== index);
+      updateOrg({
+        ...org,
+        buildings: newBuildings,
+      });
+
+      // If we were editing this building, cancel edit mode
+      if (editingIndex === index) {
+        handleCancelEdit();
+      }
+
+      showSuccess();
+    }
+  };
+
+  const showSuccess = () => {
     setShowSuccessMessage(true);
     setTimeout(() => {
       setShowSuccessMessage(false);
@@ -43,7 +110,7 @@ export const OrgForm: React.FC = () => {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8 pb-8">
+    <div className="space-y-8 pb-8">
       {/* Success notification */}
       {showSuccessMessage && (
         <div className="fixed top-24 right-6 z-50 glass-strong border border-electric-emerald/30 px-6 py-4 rounded-2xl shadow-neon animate-scale-in">
@@ -60,79 +127,81 @@ export const OrgForm: React.FC = () => {
       )}
 
       {/* Organization Name Section */}
-      <div className="relative glass rounded-2xl border-2 border-primary/30 dark:border-electric-cyan/30 p-8 overflow-hidden group">
-        {/* Gradient background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-electric-purple/5 to-electric-pink/5 dark:from-primary/10 dark:via-electric-purple/10 dark:to-electric-pink/10" />
+      <form onSubmit={handleSubmitOrg(onSubmitOrg)}>
+        <div className="relative glass rounded-2xl border-2 border-primary/30 dark:border-electric-cyan/30 p-8 overflow-hidden group">
+          {/* Gradient background */}
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-electric-purple/5 to-electric-pink/5 dark:from-primary/10 dark:via-electric-purple/10 dark:to-electric-pink/10" />
 
-        {/* Decorative corner accent */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary to-electric-purple opacity-10 blur-3xl" />
+          {/* Decorative corner accent */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary to-electric-purple opacity-10 blur-3xl" />
 
-        <div className="relative z-10">
-          <h2 className="text-3xl font-black gradient-text mb-3">Organization Information</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-            Enter your organization name below. You can add multiple buildings that belong to this organization.
-          </p>
-          <Input
-            label="Organization Name"
-            {...register('organizationName', { required: 'Organization name is required' })}
-            error={errors.organizationName?.message}
-            placeholder="e.g., Acme Corporation"
-            required
-          />
+          <div className="relative z-10">
+            <h2 className="text-3xl font-black gradient-text mb-3">Organization Information</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+              Enter your organization name below. You can add multiple buildings that belong to this organization.
+            </p>
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <Input
+                  label="Organization Name"
+                  {...registerOrg('organizationName', { required: 'Organization name is required' })}
+                  error={orgErrors.organizationName?.message}
+                  placeholder="e.g., Acme Corporation"
+                  required
+                />
+              </div>
+              <div className="flex items-end">
+                <Button type="submit" variant="success">
+                  Save Name
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      </form>
 
-      {/* Buildings Section */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h3 className="text-2xl font-black bg-gradient-to-r from-electric-purple to-electric-pink bg-clip-text text-transparent">Buildings</h3>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Add all buildings that are part of this organization. Each building will go through the complete setup process.
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="purple"
-          size="md"
-          icon={Plus}
-          onClick={() => append(getEmptyBuilding())}
-        >
-          Add Building
-        </Button>
-      </div>
-
-      {fields.map((field, index) => (
-        <Card key={field.id} title={`Building ${index + 1}`}>
+      {/* Add/Edit Building Form */}
+      <form onSubmit={handleSubmitBuilding(onSubmitBuilding)}>
+        <Card title={editingIndex !== null ? '✏️ Edit Building' : '➕ Add New Building'}>
           <div className="space-y-4">
+            {editingIndex !== null && (
+              <div className="flex items-center gap-2 p-3 bg-electric-cyan/10 dark:bg-electric-cyan/20 rounded-lg border border-electric-cyan/30">
+                <Edit2 className="w-4 h-4 text-electric-cyan" />
+                <span className="text-sm font-medium text-gray-900 dark:text-white">
+                  Editing Building #{editingIndex + 1}
+                </span>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Input
                 label="Building Name"
-                {...register(`buildings.${index}.buildingName`, { required: 'Building name is required' })}
-                error={errors.buildings?.[index]?.buildingName?.message}
+                {...registerBuilding('buildingName', { required: 'Building name is required' })}
+                error={buildingErrors.buildingName?.message}
                 placeholder="e.g., Main Office"
                 required
               />
 
               <Input
                 label="Country"
-                {...register(`buildings.${index}.country`, { required: 'Country is required' })}
-                error={errors.buildings?.[index]?.country?.message}
+                {...registerBuilding('country', { required: 'Country is required' })}
+                error={buildingErrors.country?.message}
                 placeholder="e.g., United States"
                 required
               />
 
               <Input
                 label="City"
-                {...register(`buildings.${index}.city`, { required: 'City is required' })}
-                error={errors.buildings?.[index]?.city?.message}
+                {...registerBuilding('city', { required: 'City is required' })}
+                error={buildingErrors.city?.message}
                 placeholder="e.g., New York"
                 required
               />
 
               <Input
                 label="Street Address"
-                {...register(`buildings.${index}.streetAddress`, { required: 'Street address is required' })}
-                error={errors.buildings?.[index]?.streetAddress?.message}
+                {...registerBuilding('streetAddress', { required: 'Street address is required' })}
+                error={buildingErrors.streetAddress?.message}
                 placeholder="e.g., 123 Main St"
                 required
               />
@@ -140,20 +209,20 @@ export const OrgForm: React.FC = () => {
               <Input
                 label="Floor"
                 type="number"
-                {...register(`buildings.${index}.floor`, {
+                {...registerBuilding('floor', {
                   valueAsNumber: true,
                   required: 'Floor is required'
                 })}
-                error={errors.buildings?.[index]?.floor?.message}
+                error={buildingErrors.floor?.message}
                 placeholder="e.g., 5"
                 required
               />
 
               <Select
                 label="Currency"
-                {...register(`buildings.${index}.currency`)}
+                {...registerBuilding('currency')}
                 options={CURRENCIES.map((c) => ({ value: c, label: c }))}
-                error={errors.buildings?.[index]?.currency?.message}
+                error={buildingErrors.currency?.message}
                 required
               />
             </div>
@@ -161,38 +230,165 @@ export const OrgForm: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Checkbox
                 label="Can Accept Visitors"
-                {...register(`buildings.${index}.canAcceptVisitors`)}
+                {...registerBuilding('canAcceptVisitors')}
               />
 
               <Checkbox
                 label="Has Catering"
-                {...register(`buildings.${index}.hasCatering`)}
+                {...registerBuilding('hasCatering')}
               />
             </div>
 
-            {fields.length > 1 && (
-              <div className="flex justify-end pt-4 border-t">
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              {editingIndex !== null && (
                 <Button
                   type="button"
-                  variant="danger"
-                  size="sm"
-                  icon={Trash2}
-                  onClick={() => remove(index)}
+                  variant="secondary"
+                  size="md"
+                  icon={X}
+                  onClick={handleCancelEdit}
                 >
-                  Remove Building
+                  Cancel Edit
                 </Button>
-              </div>
-            )}
+              )}
+              <Button
+                type="submit"
+                variant={editingIndex !== null ? 'purple' : 'success'}
+                size="md"
+                icon={editingIndex !== null ? Check : Plus}
+              >
+                {editingIndex !== null ? 'Update Building' : 'Add Building'}
+              </Button>
+            </div>
           </div>
         </Card>
-      ))}
+      </form>
 
-      <div className="flex justify-end pt-6 sticky bottom-6 glass-strong rounded-2xl border border-primary/20 dark:border-electric-cyan/20 px-8 py-4 shadow-neon animate-slide-up">
-        <Button type="submit" variant="success" size="lg">
-          Save Organization Data
-        </Button>
-      </div>
-    </form>
+      {/* Buildings Table */}
+      {org.buildings.length > 0 && (
+        <div className="glass rounded-2xl border border-primary/20 dark:border-electric-cyan/20 overflow-hidden">
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-2xl font-black bg-gradient-to-r from-electric-purple to-electric-pink bg-clip-text text-transparent">
+              Buildings ({org.buildings.length})
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              All buildings in your organization
+            </p>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 dark:bg-gray-800/50">
+                <tr>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                    #
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                    Building Name
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                    Location
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                    Floor
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                    Currency
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                    Features
+                  </th>
+                  <th className="px-6 py-4 text-right text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {org.buildings.map((building, index) => (
+                  <tr
+                    key={index}
+                    className={`hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors ${
+                      editingIndex === index ? 'bg-electric-cyan/5 dark:bg-electric-cyan/10' : ''
+                    }`}
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                      {index + 1}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-bold text-gray-900 dark:text-white">
+                        {building.buildingName}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {building.streetAddress}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900 dark:text-white">{building.city}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">{building.country}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                      {building.floor}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-primary/10 text-primary dark:bg-electric-cyan/20 dark:text-electric-cyan">
+                        {building.currency}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex gap-2">
+                        {building.canAcceptVisitors && (
+                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-electric-emerald/10 text-electric-emerald">
+                            Visitors
+                          </span>
+                        )}
+                        {building.hasCatering && (
+                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-electric-purple/10 text-electric-purple">
+                            Catering
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(index)}
+                          className="p-2 rounded-lg hover:bg-electric-cyan/10 text-electric-cyan transition-colors"
+                          title="Edit building"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(index)}
+                          className="p-2 rounded-lg hover:bg-danger/10 text-danger transition-colors"
+                          title="Delete building"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {org.buildings.length === 0 && (
+        <div className="glass rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 p-12 text-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-electric-purple to-electric-pink opacity-20 flex items-center justify-center">
+            <Plus className="w-8 h-8 text-gray-400" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">No Buildings Added</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Add your first building using the form above
+          </p>
+        </div>
+      )}
+    </div>
   );
 };
 
