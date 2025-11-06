@@ -1,105 +1,136 @@
-import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { Plus, Edit2, Trash2, CheckCircle, X, Check } from 'lucide-react';
-import { useBuildSheetStore } from '../../store/buildsheet.store';
+import React, { useState, useRef } from 'react';
 import type { ZoneData } from '../../types/buildsheet.types';
-import { Input } from '../ui/Input';
-import { Select } from '../ui/Select';
-import { Checkbox } from '../ui/Checkbox';
+import { useBuildSheetStore } from '../../store/buildsheet.store';
 import { Button } from '../ui/Button';
-import { Card } from '../ui/Card';
+import { Plus, Download, Upload, Trash2 } from 'lucide-react';
+
+const getEmptyZone = (): ZoneData => ({
+  building: '',
+  level: 0,
+  zoneName: '',
+  zoneCapacity: 0,
+  userGroups: '',
+  peopleCountingRequired: false,
+  peopleCountingMethod: '',
+  peopleFindingRequired: false,
+  peopleFindingMethod: '',
+  firewardensLocatable: false,
+  firstAidersLocatable: false,
+  covidMarshallLocatable: false,
+});
 
 export const ZonesForm: React.FC = () => {
-  const zones = useBuildSheetStore((state) => state.zones);
-  const updateZones = useBuildSheetStore((state) => state.updateZones);
-  const org = useBuildSheetStore((state) => state.org);
-  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const { zones, org, setZones } = useBuildSheetStore();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
 
-  // Form for adding/editing zones
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-    setValue,
-    watch,
-  } = useForm<ZoneData>({
-    defaultValues: getEmptyZone(),
-  });
+  const buildingOptions = org.buildings.map((b) => b.buildingName);
 
-  const peopleCountingRequired = watch('peopleCountingRequired');
-  const peopleFindingRequired = watch('peopleFindingRequired');
+  // Initialize with at least one empty row
+  const displayZones = zones.length > 0 ? zones : [getEmptyZone()];
 
-  const onSubmit = (data: ZoneData) => {
-    const newZones = [...zones];
+  const handleCellChange = (index: number, field: keyof ZoneData, value: any) => {
+    const newZones = [...displayZones];
+    newZones[index] = { ...newZones[index], [field]: value };
+    setZones(newZones);
+  };
 
-    if (editingIndex !== null) {
-      // Update existing zone
-      newZones[editingIndex] = data;
-      setEditingIndex(null);
-    } else {
-      // Add new zone
-      newZones.push(data);
+  const handleAddRow = () => {
+    setZones([...zones, getEmptyZone()]);
+  };
+
+  const handleDeleteRow = (index: number) => {
+    if (zones.length === 0) return; // Don't delete the placeholder row
+    const newZones = zones.filter((_, i) => i !== index);
+    setZones(newZones);
+  };
+
+  const handleDownloadTemplate = () => {
+    const headers = [
+      'Building',
+      'Level',
+      'Zone Name',
+      'Zone Capacity',
+      'AD User Groups',
+      'People Counting Required (Y/N)',
+      'People Counting Method',
+      'People Finding Required (Y/N)',
+      'People Finding Method',
+      'Fire Wardens Locatable (Y/N)',
+      'First Aiders Locatable (Y/N)',
+      'COVID Marshalls Locatable (Y/N)',
+    ];
+
+    const exampleRow = [
+      'Buckingham Palace',
+      '1',
+      'Finance',
+      '30',
+      'accounting, tax',
+      'Y',
+      'Meraki WiFi',
+      'Y',
+      'DNA Spaces',
+      'Y',
+      'Y',
+      'N',
+    ];
+
+    const csv = [headers.join(','), exampleRow.join(',')].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'zones-template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleUploadCSV = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target?.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      const lines = text.split('\n').filter(line => line.trim());
+      const data = lines.slice(1); // Skip header row
+
+      const importedZones: ZoneData[] = data.map(line => {
+        const values = line.split(',').map(v => v.trim());
+        return {
+          building: values[0] || '',
+          level: parseInt(values[1]) || 0,
+          zoneName: values[2] || '',
+          zoneCapacity: parseInt(values[3]) || 0,
+          userGroups: values[4] || '',
+          peopleCountingRequired: values[5]?.toUpperCase() === 'Y',
+          peopleCountingMethod: values[6] || '',
+          peopleFindingRequired: values[7]?.toUpperCase() === 'Y',
+          peopleFindingMethod: values[8] || '',
+          firewardensLocatable: values[9]?.toUpperCase() === 'Y',
+          firstAidersLocatable: values[10]?.toUpperCase() === 'Y',
+          covidMarshallLocatable: values[11]?.toUpperCase() === 'Y',
+        };
+      });
+
+      setZones(importedZones);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    };
+    reader.readAsText(file);
+
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
-
-    updateZones(newZones);
-    reset(getEmptyZone());
-    showSuccess();
   };
-
-  const handleEdit = (index: number) => {
-    const zone = zones[index];
-    setEditingIndex(index);
-
-    // Populate form with zone data
-    Object.keys(zone).forEach((key) => {
-      setValue(key as keyof ZoneData, zone[key as keyof ZoneData]);
-    });
-
-    // Scroll to form
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleCancelEdit = () => {
-    setEditingIndex(null);
-    reset(getEmptyZone());
-  };
-
-  const handleDelete = (index: number) => {
-    if (confirm('Are you sure you want to delete this zone?')) {
-      const newZones = zones.filter((_, i) => i !== index);
-      updateZones(newZones);
-
-      if (editingIndex === index) {
-        handleCancelEdit();
-      }
-
-      showSuccess();
-    }
-  };
-
-  const showSuccess = () => {
-    setShowSuccessMessage(true);
-    setTimeout(() => {
-      setShowSuccessMessage(false);
-    }, 3000);
-  };
-
-  // Get building options from org data
-  const buildingOptions = org.buildings.map((b) => ({
-    value: b.buildingName,
-    label: b.buildingName,
-  }));
 
   if (buildingOptions.length === 0) {
     return (
       <div className="glass rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 p-12 text-center">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-electric-purple to-electric-pink opacity-20 flex items-center justify-center">
-          <Plus className="w-8 h-8 text-gray-400" />
-        </div>
-        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">No Buildings Found</h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+        <h3 className="text-xl font-bold mb-4 gradient-text">No Buildings Found</h3>
+        <p className="text-gray-600 dark:text-gray-400">
           Please add buildings in the Organization tab first before creating zones.
         </p>
       </div>
@@ -107,402 +138,205 @@ export const ZonesForm: React.FC = () => {
   }
 
   return (
-    <div className="space-y-8 pb-8">
-      {/* Success notification */}
-      {showSuccessMessage && (
-        <div className="fixed top-24 right-6 z-50 glass-strong border border-electric-emerald/30 px-6 py-4 rounded-2xl shadow-neon animate-scale-in">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-electric-emerald to-electric-lime flex items-center justify-center">
-              <CheckCircle className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <p className="font-bold text-gray-900 dark:text-white">Success!</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Zone data saved</p>
-            </div>
-          </div>
-        </div>
-      )}
-
+    <div className="space-y-6">
       {/* Header */}
-      <div className="relative glass rounded-2xl border-2 border-primary/30 dark:border-electric-cyan/30 p-8 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-electric-purple/5 to-electric-pink/5 dark:from-primary/10 dark:via-electric-purple/10 dark:to-electric-pink/10" />
-        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary to-electric-purple opacity-10 blur-3xl" />
-
-        <div className="relative z-10">
-          <h2 className="text-3xl font-black gradient-text mb-3">Zone Management</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Define zones within each building. Zones help organize spaces and manage capacity, user groups, and location services.
-          </p>
-        </div>
+      <div className="glass rounded-2xl p-8 gradient-border">
+        <h2 className="text-2xl font-bold mb-2 gradient-text">Zones Management</h2>
+        <p className="text-gray-600 dark:text-gray-400">
+          Define zones for each building with capacity and location tracking settings.
+        </p>
       </div>
 
-      {/* Add/Edit Zone Form */}
-      <form onSubmit={handleSubmit(onSubmit)}>
-        <Card title={editingIndex !== null ? '✏️ Edit Zone' : '➕ Add New Zone'}>
-          <div className="space-y-6">
-            {editingIndex !== null && (
-              <div className="flex items-center gap-2 p-3 bg-electric-cyan/10 dark:bg-electric-cyan/20 rounded-lg border border-electric-cyan/30">
-                <Edit2 className="w-4 h-4 text-electric-cyan" />
-                <span className="text-sm font-medium text-gray-900 dark:text-white">
-                  Editing Zone #{editingIndex + 1}
-                </span>
-              </div>
-            )}
-
-            {/* Basic Information */}
-            <div>
-              <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3 uppercase tracking-wide">
-                Basic Information
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Select
-                  label="Building"
-                  {...register('building', { required: 'Building is required' })}
-                  options={buildingOptions}
-                  error={errors.building?.message}
-                  required
-                />
-
-                <Input
-                  label="Level"
-                  type="number"
-                  {...register('level', {
-                    valueAsNumber: true,
-                    required: 'Level is required'
-                  })}
-                  error={errors.level?.message}
-                  placeholder="e.g., 3"
-                  required
-                />
-
-                <Input
-                  label="Zone Name"
-                  {...register('zoneName', { required: 'Zone name is required' })}
-                  error={errors.zoneName?.message}
-                  placeholder="e.g., Finance"
-                  required
-                />
-
-                <Input
-                  label="Zone Capacity"
-                  type="number"
-                  {...register('zoneCapacity', {
-                    valueAsNumber: true,
-                    required: 'Zone capacity is required',
-                    min: { value: 1, message: 'Capacity must be at least 1' }
-                  })}
-                  error={errors.zoneCapacity?.message}
-                  placeholder="e.g., 30"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* User Groups */}
-            <div>
-              <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3 uppercase tracking-wide">
-                Access Control
-              </h4>
-              <Input
-                label="Active Directory User Groups"
-                {...register('userGroups')}
-                error={errors.userGroups?.message}
-                placeholder="e.g., accounting, tax, finance"
-                helperText="Enter comma-separated AD group names"
-              />
-            </div>
-
-            {/* People Counting */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wide">
-                People Counting
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Checkbox
-                  label="People Counting Required"
-                  {...register('peopleCountingRequired')}
-                />
-
-                {peopleCountingRequired && (
-                  <Select
-                    label="People Counting Method"
-                    {...register('peopleCountingMethod')}
-                    options={[
-                      { value: '', label: 'Select method...' },
-                      { value: 'Meraki', label: 'Meraki WiFi' },
-                      { value: 'DNA Spaces', label: 'DNA Spaces' },
-                      { value: 'Other', label: 'Other' },
-                    ]}
-                    error={errors.peopleCountingMethod?.message}
-                  />
-                )}
-              </div>
-            </div>
-
-            {/* People Finding */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wide">
-                People Finding
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Checkbox
-                  label="People Finding Required"
-                  {...register('peopleFindingRequired')}
-                />
-
-                {peopleFindingRequired && (
-                  <Input
-                    label="People Finding Method"
-                    {...register('peopleFindingMethod')}
-                    error={errors.peopleFindingMethod?.message}
-                    placeholder="e.g., Cisco DNA Spaces, Meraki"
-                  />
-                )}
-              </div>
-            </div>
-
-            {/* Role-Based Location Search */}
-            <div>
-              <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3 uppercase tracking-wide">
-                Role-Based Location Search
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Checkbox
-                  label="Fire Wardens Locatable"
-                  {...register('firewardensLocatable')}
-                />
-
-                <Checkbox
-                  label="First Aiders Locatable"
-                  {...register('firstAidersLocatable')}
-                />
-
-                <Checkbox
-                  label="COVID Marshalls Locatable"
-                  {...register('covidMarshallLocatable')}
-                />
-              </div>
-            </div>
-
-            {/* Form Actions */}
-            <div className="flex justify-end gap-3 pt-4 border-t">
-              {editingIndex !== null && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="md"
-                  icon={X}
-                  onClick={handleCancelEdit}
-                >
-                  Cancel Edit
-                </Button>
-              )}
-              <Button
-                type="submit"
-                variant={editingIndex !== null ? 'purple' : 'success'}
-                size="md"
-                icon={editingIndex !== null ? Check : Plus}
-              >
-                {editingIndex !== null ? 'Update Zone' : 'Add Zone'}
-              </Button>
-            </div>
-          </div>
-        </Card>
-      </form>
-
-      {/* Zones Table */}
-      {zones.length > 0 && (
-        <div className="glass rounded-2xl border border-primary/20 dark:border-electric-cyan/20 overflow-hidden">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="text-2xl font-black bg-gradient-to-r from-electric-purple to-electric-pink bg-clip-text text-transparent">
-              Zones ({zones.length})
-            </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              All configured zones across buildings
-            </p>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 dark:bg-gray-800/50">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                    #
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                    Building
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                    Level
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                    Zone Name
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                    Capacity
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                    User Groups
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                    People Counting
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                    People Finding
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                    Role Search
-                  </th>
-                  <th className="px-6 py-4 text-right text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {zones.map((zone, index) => (
-                  <tr
-                    key={index}
-                    className={`hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors ${
-                      editingIndex === index ? 'bg-electric-cyan/5 dark:bg-electric-cyan/10' : ''
-                    }`}
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                      {index + 1}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
-                      {zone.building}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      {zone.level}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-bold text-gray-900 dark:text-white">
-                        {zone.zoneName}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-primary/10 text-primary dark:bg-electric-cyan/20 dark:text-electric-cyan">
-                        {zone.zoneCapacity}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                      {zone.userGroups || <span className="text-gray-400 italic">None</span>}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {zone.peopleCountingRequired ? (
-                        <div>
-                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-electric-emerald/10 text-electric-emerald">
-                            Yes
-                          </span>
-                          {zone.peopleCountingMethod && (
-                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                              {zone.peopleCountingMethod}
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
-                          No
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {zone.peopleFindingRequired ? (
-                        <div>
-                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-electric-purple/10 text-electric-purple">
-                            Yes
-                          </span>
-                          {zone.peopleFindingMethod && (
-                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                              {zone.peopleFindingMethod}
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
-                          No
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-wrap gap-1">
-                        {zone.firewardensLocatable && (
-                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-danger/10 text-danger">
-                            Fire Wardens
-                          </span>
-                        )}
-                        {zone.firstAidersLocatable && (
-                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-electric-emerald/10 text-electric-emerald">
-                            First Aiders
-                          </span>
-                        )}
-                        {zone.covidMarshallLocatable && (
-                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-electric-cyan/10 text-electric-cyan">
-                            COVID
-                          </span>
-                        )}
-                        {!zone.firewardensLocatable && !zone.firstAidersLocatable && !zone.covidMarshallLocatable && (
-                          <span className="text-gray-400 italic text-xs">None</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleEdit(index)}
-                          className="p-2 rounded-lg hover:bg-electric-cyan/10 text-electric-cyan transition-colors"
-                          title="Edit zone"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(index)}
-                          className="p-2 rounded-lg hover:bg-danger/10 text-danger transition-colors"
-                          title="Delete zone"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Empty state */}
-      {zones.length === 0 && (
-        <div className="glass rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 p-12 text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-electric-purple to-electric-pink opacity-20 flex items-center justify-center">
-            <Plus className="w-8 h-8 text-gray-400" />
-          </div>
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">No Zones Added</h3>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Add your first zone using the form above
+      {/* Success Message */}
+      {showSuccess && (
+        <div className="glass rounded-xl p-4 border-l-4 border-green-500 bg-green-50/50 dark:bg-green-900/20">
+          <p className="text-green-700 dark:text-green-300 font-medium">
+            CSV imported successfully!
           </p>
         </div>
       )}
+
+      {/* Actions */}
+      <div className="flex gap-3 flex-wrap">
+        <Button variant="secondary" onClick={handleDownloadTemplate} icon={Download}>
+          Download CSV Template
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => fileInputRef.current?.click()}
+          icon={Upload}
+        >
+          Upload CSV
+        </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv"
+          onChange={handleUploadCSV}
+          className="hidden"
+        />
+        <Button variant="primary" onClick={handleAddRow} icon={Plus}>
+          Add Row
+        </Button>
+      </div>
+
+      {/* Editable Table */}
+      <div className="glass rounded-2xl p-6 overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b-2 border-gray-300 dark:border-gray-700">
+              <th className="text-left py-3 px-2 font-semibold text-sm min-w-[150px]">Building</th>
+              <th className="text-left py-3 px-2 font-semibold text-sm min-w-[80px]">Level</th>
+              <th className="text-left py-3 px-2 font-semibold text-sm min-w-[120px]">Zone Name</th>
+              <th className="text-left py-3 px-2 font-semibold text-sm min-w-[100px]">Capacity</th>
+              <th className="text-left py-3 px-2 font-semibold text-sm min-w-[150px]">AD User Groups</th>
+              <th className="text-center py-3 px-2 font-semibold text-sm min-w-[80px]">People Counting</th>
+              <th className="text-left py-3 px-2 font-semibold text-sm min-w-[150px]">Counting Method</th>
+              <th className="text-center py-3 px-2 font-semibold text-sm min-w-[80px]">People Finding</th>
+              <th className="text-left py-3 px-2 font-semibold text-sm min-w-[150px]">Finding Method</th>
+              <th className="text-center py-3 px-2 font-semibold text-sm min-w-[80px]">Fire Wardens</th>
+              <th className="text-center py-3 px-2 font-semibold text-sm min-w-[80px]">First Aiders</th>
+              <th className="text-center py-3 px-2 font-semibold text-sm min-w-[80px]">COVID</th>
+              <th className="text-center py-3 px-2 font-semibold text-sm min-w-[60px]">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {displayZones.map((zone, index) => (
+              <tr key={index} className="border-b border-gray-200 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30">
+                <td className="py-2 px-2">
+                  <select
+                    value={zone.building}
+                    onChange={(e) => handleCellChange(index, 'building', e.target.value)}
+                    className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select building...</option>
+                    {buildingOptions.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </td>
+                <td className="py-2 px-2">
+                  <input
+                    type="number"
+                    value={zone.level || ''}
+                    onChange={(e) => handleCellChange(index, 'level', parseInt(e.target.value) || 0)}
+                    placeholder="3"
+                    className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </td>
+                <td className="py-2 px-2">
+                  <input
+                    type="text"
+                    value={zone.zoneName}
+                    onChange={(e) => handleCellChange(index, 'zoneName', e.target.value)}
+                    placeholder="Finance"
+                    className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </td>
+                <td className="py-2 px-2">
+                  <input
+                    type="number"
+                    value={zone.zoneCapacity || ''}
+                    onChange={(e) => handleCellChange(index, 'zoneCapacity', parseInt(e.target.value) || 0)}
+                    placeholder="30"
+                    className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </td>
+                <td className="py-2 px-2">
+                  <input
+                    type="text"
+                    value={zone.userGroups}
+                    onChange={(e) => handleCellChange(index, 'userGroups', e.target.value)}
+                    placeholder="accounting, tax"
+                    className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </td>
+                <td className="py-2 px-2 text-center">
+                  <input
+                    type="checkbox"
+                    checked={zone.peopleCountingRequired}
+                    onChange={(e) => handleCellChange(index, 'peopleCountingRequired', e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </td>
+                <td className="py-2 px-2">
+                  <select
+                    value={zone.peopleCountingMethod}
+                    onChange={(e) => handleCellChange(index, 'peopleCountingMethod', e.target.value)}
+                    disabled={!zone.peopleCountingRequired}
+                    className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="">Select...</option>
+                    <option value="Meraki">Meraki WiFi</option>
+                    <option value="DNA Spaces">DNA Spaces</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </td>
+                <td className="py-2 px-2 text-center">
+                  <input
+                    type="checkbox"
+                    checked={zone.peopleFindingRequired}
+                    onChange={(e) => handleCellChange(index, 'peopleFindingRequired', e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </td>
+                <td className="py-2 px-2">
+                  <input
+                    type="text"
+                    value={zone.peopleFindingMethod}
+                    onChange={(e) => handleCellChange(index, 'peopleFindingMethod', e.target.value)}
+                    disabled={!zone.peopleFindingRequired}
+                    placeholder="DNA Spaces"
+                    className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                </td>
+                <td className="py-2 px-2 text-center">
+                  <input
+                    type="checkbox"
+                    checked={zone.firewardensLocatable}
+                    onChange={(e) => handleCellChange(index, 'firewardensLocatable', e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </td>
+                <td className="py-2 px-2 text-center">
+                  <input
+                    type="checkbox"
+                    checked={zone.firstAidersLocatable}
+                    onChange={(e) => handleCellChange(index, 'firstAidersLocatable', e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </td>
+                <td className="py-2 px-2 text-center">
+                  <input
+                    type="checkbox"
+                    checked={zone.covidMarshallLocatable}
+                    onChange={(e) => handleCellChange(index, 'covidMarshallLocatable', e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </td>
+                <td className="py-2 px-2 text-center">
+                  {zones.length > 0 && (
+                    <button
+                      onClick={() => handleDeleteRow(index)}
+                      className="p-1 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
+                      title="Delete row"
+                    >
+                      <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Info */}
+      <div className="glass rounded-xl p-4 border-l-4 border-blue-500 bg-blue-50/50 dark:bg-blue-900/20">
+        <p className="text-sm text-blue-700 dark:text-blue-300">
+          <strong>Tip:</strong> Fill in the table directly or download the CSV template, fill it in Excel/Sheets, and upload it.
+        </p>
+      </div>
     </div>
   );
 };
-
-function getEmptyZone(): ZoneData {
-  return {
-    building: '',
-    level: 0,
-    zoneName: '',
-    zoneCapacity: 0,
-    userGroups: '',
-    peopleCountingRequired: false,
-    peopleCountingMethod: '',
-    peopleFindingRequired: false,
-    peopleFindingMethod: '',
-    firewardensLocatable: false,
-    firstAidersLocatable: false,
-    covidMarshallLocatable: false,
-  };
-}

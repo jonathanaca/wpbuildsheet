@@ -34,13 +34,30 @@ interface BuildSheetStore extends BuildSheetState {
   updateInterfaces: (data: InterfacesData) => void;
   updateInteractiveMaps: (data: InteractiveMapsChecklist) => void;
   updateZones: (data: ZonesDataArray) => void;
+  setZones: (data: ZonesDataArray) => void;
   updateIntegrations: (data: IntegrationsDataArray) => void;
   updateUserRequirements: (data: UserRequirementsDataArray) => void;
   updateNavigationLinks: (data: NavigationLinksDataArray) => void;
   updateRooms: (data: RoomsDataArray) => void;
+  setRooms: (data: RoomsDataArray) => void;
+  addRoom: (room: RoomsDataArray[0]) => void;
+  updateRoom: (index: number, room: RoomsDataArray[0]) => void;
+  deleteRoom: (index: number) => void;
   updateDesks: (data: DesksDataArray) => void;
+  setDesks: (data: DesksDataArray) => void;
+  addDesk: (desk: DesksDataArray[0]) => void;
+  updateDesk: (index: number, desk: DesksDataArray[0]) => void;
+  deleteDesk: (index: number) => void;
   updateLockers: (data: LockersDataArray) => void;
+  setLockers: (data: LockersDataArray) => void;
+  addLocker: (locker: LockersDataArray[0]) => void;
+  updateLocker: (index: number, locker: LockersDataArray[0]) => void;
+  deleteLocker: (index: number) => void;
   updateCarSpaces: (data: CarSpacesDataArray) => void;
+  setCarSpaces: (data: CarSpacesDataArray) => void;
+  addCarSpace: (carSpace: CarSpacesDataArray[0]) => void;
+  updateCarSpace: (index: number, carSpace: CarSpacesDataArray[0]) => void;
+  deleteCarSpace: (index: number) => void;
   updateCatering: (data: CateringDataArray) => void;
   updateWOIntegration: (data: WOIntegrationDataArray) => void;
   updateEnvironmentalMonitoring: (data: EnvironmentalMonitoringDataArray) => void;
@@ -169,13 +186,46 @@ export const useBuildSheetStore = create<BuildSheetStore>()(
       updateInterfaces: (data: InterfacesData) => set({ interfaces: data }),
       updateInteractiveMaps: (data: InteractiveMapsChecklist) => set({ interactiveMaps: data }),
       updateZones: (data: ZonesDataArray) => set({ zones: data }),
+      setZones: (data: ZonesDataArray) => set({ zones: data }),
       updateIntegrations: (data: IntegrationsDataArray) => set({ integrations: data }),
       updateUserRequirements: (data: UserRequirementsDataArray) => set({ userRequirements: data }),
       updateNavigationLinks: (data: NavigationLinksDataArray) => set({ navigationLinks: data }),
       updateRooms: (data: RoomsDataArray) => set({ rooms: data }),
+      setRooms: (data: RoomsDataArray) => set({ rooms: data }),
+      addRoom: (room) => set((state) => ({ rooms: [...state.rooms, room] })),
+      updateRoom: (index, room) => set((state) => ({
+        rooms: state.rooms.map((r, i) => i === index ? room : r)
+      })),
+      deleteRoom: (index) => set((state) => ({
+        rooms: state.rooms.filter((_, i) => i !== index)
+      })),
       updateDesks: (data: DesksDataArray) => set({ desks: data }),
+      setDesks: (data: DesksDataArray) => set({ desks: data }),
+      addDesk: (desk) => set((state) => ({ desks: [...state.desks, desk] })),
+      updateDesk: (index, desk) => set((state) => ({
+        desks: state.desks.map((d, i) => i === index ? desk : d)
+      })),
+      deleteDesk: (index) => set((state) => ({
+        desks: state.desks.filter((_, i) => i !== index)
+      })),
       updateLockers: (data: LockersDataArray) => set({ lockers: data }),
+      setLockers: (data: LockersDataArray) => set({ lockers: data }),
+      addLocker: (locker) => set((state) => ({ lockers: [...state.lockers, locker] })),
+      updateLocker: (index, locker) => set((state) => ({
+        lockers: state.lockers.map((l, i) => i === index ? locker : l)
+      })),
+      deleteLocker: (index) => set((state) => ({
+        lockers: state.lockers.filter((_, i) => i !== index)
+      })),
       updateCarSpaces: (data: CarSpacesDataArray) => set({ carSpaces: data }),
+      setCarSpaces: (data: CarSpacesDataArray) => set({ carSpaces: data }),
+      addCarSpace: (carSpace) => set((state) => ({ carSpaces: [...state.carSpaces, carSpace] })),
+      updateCarSpace: (index, carSpace) => set((state) => ({
+        carSpaces: state.carSpaces.map((c, i) => i === index ? carSpace : c)
+      })),
+      deleteCarSpace: (index) => set((state) => ({
+        carSpaces: state.carSpaces.filter((_, i) => i !== index)
+      })),
       updateCatering: (data: CateringDataArray) => set({ catering: data }),
       updateWOIntegration: (data: WOIntegrationDataArray) => set({ woIntegration: data }),
       updateEnvironmentalMonitoring: (data: EnvironmentalMonitoringDataArray) => set({ environmentalMonitoring: data }),
