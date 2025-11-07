@@ -1,16 +1,10 @@
 import React, { useState, useRef } from 'react';
 import { useBuildSheetStore } from '../../store/buildsheet.store';
-import type { FloorPlan, MapOverlay } from '../../types/buildsheet.types';
-// Design mode types (for future use)
-// import type { DesignElement, DesignElementType } from '../../types/buildsheet.types';
-import { Upload, Download, Trash2, MapPin, Square, Home, ZoomIn, ZoomOut, Maximize2, Eye, EyeOff, RotateCw, Edit3 } from 'lucide-react';
-// Design mode icons (for future use)
-// import { Type, Armchair, DoorOpen, Building2, Table, Laptop } from 'lucide-react';
+import type { FloorPlan, MapOverlay, DesignElement, DesignElementType } from '../../types/buildsheet.types';
+import { Upload, Download, Trash2, MapPin, Square, Home, ZoomIn, ZoomOut, Maximize2, Eye, EyeOff, RotateCw, Edit3, Type, Armchair, DoorOpen, Building2, Table, TreePine, X } from 'lucide-react';
 
 type EditorMode = 'data' | 'design';
 type SidebarTab = 'zones' | 'rooms' | 'desks';
-// Design tools (for future use)
-// type DesignTool = 'text' | 'desk-icon' | 'chair-icon' | 'toilet-icon' | 'stairs-icon' | 'exit-icon' | 'elevator-icon' | 'plant-icon' | 'table-icon';
 
 export const InteractiveMapsForm: React.FC = () => {
   const org = useBuildSheetStore((state) => state.org);
@@ -24,18 +18,18 @@ export const InteractiveMapsForm: React.FC = () => {
   const addOverlay = useBuildSheetStore((state) => state.addOverlay);
   const updateOverlay = useBuildSheetStore((state) => state.updateOverlay);
   const deleteOverlay = useBuildSheetStore((state) => state.deleteOverlay);
-  // Design mode store methods (for future use)
-  // const addDesignElement = useBuildSheetStore((state) => state.addDesignElement);
-  // const updateDesignElement = useBuildSheetStore((state) => state.updateDesignElement);
-  // const deleteDesignElement = useBuildSheetStore((state) => state.deleteDesignElement);
+  const addDesignElement = useBuildSheetStore((state) => state.addDesignElement);
+  const updateDesignElement = useBuildSheetStore((state) => state.updateDesignElement);
+  const deleteDesignElement = useBuildSheetStore((state) => state.deleteDesignElement);
 
   const [editorMode, setEditorMode] = useState<EditorMode>('data');
   const [selectedBuilding, setSelectedBuilding] = useState('');
   const [selectedLevel, setSelectedLevel] = useState<number | ''>('');
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('desks');
-  // Design mode state (for future use)
-  // const [selectedDesignTool, setSelectedDesignTool] = useState<DesignTool | null>(null);
-  // const [selectedDesignElement, setSelectedDesignElement] = useState<string | null>(null);
+  const [selectedDesignTool, setSelectedDesignTool] = useState<DesignElementType | null>(null);
+  const [selectedDesignElement, setSelectedDesignElement] = useState<string | null>(null);
+  const [isEditingText, setIsEditingText] = useState(false);
+  const [textInput, setTextInput] = useState('');
   const [draggedItem, setDraggedItem] = useState<{ id: string; type: 'zone' | 'room' | 'desk' } | null>(null);
   const [selectedOverlay, setSelectedOverlay] = useState<string | null>(null);
   const [isResizing, setIsResizing] = useState(false);
@@ -259,6 +253,113 @@ export const InteractiveMapsForm: React.FC = () => {
     };
 
     updateOverlay(selectedBuilding, selectedLevel as number, overlayId, updatedOverlay);
+  };
+
+  // Design Mode: Handle canvas click to place element
+  const handleDesignCanvasClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (editorMode !== 'design' || !selectedDesignTool || !canvasRef.current || !currentFloorPlan) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / zoom;
+    const y = (event.clientY - rect.top) / zoom;
+
+    if (selectedDesignTool === 'text') {
+      // Show text input dialog
+      setIsEditingText(true);
+      setTextInput('');
+      return;
+    }
+
+    // Place icon
+    const newElement: DesignElement = {
+      id: `design-${Date.now()}`,
+      type: selectedDesignTool,
+      x,
+      y,
+      rotation: 0,
+      size: 24,
+      color: '#333333',
+    };
+
+    addDesignElement(selectedBuilding, selectedLevel as number, newElement);
+    setSelectedDesignTool(null); // Deselect tool after placing
+  };
+
+  // Add text element after input
+  const handleAddText = () => {
+    if (!textInput.trim() || !canvasRef.current || !currentFloorPlan) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const centerX = rect.width / 2 / zoom;
+    const centerY = rect.height / 2 / zoom;
+
+    const newElement: DesignElement = {
+      id: `text-${Date.now()}`,
+      type: 'text',
+      x: centerX,
+      y: centerY,
+      rotation: 0,
+      text: textInput,
+      fontSize: 16,
+      fontWeight: 'normal',
+      color: '#000000',
+    };
+
+    addDesignElement(selectedBuilding, selectedLevel as number, newElement);
+    setIsEditingText(false);
+    setTextInput('');
+    setSelectedDesignTool(null);
+  };
+
+  // Render icon based on type
+  const renderIcon = (type: DesignElementType, size: number = 24, color: string = '#333') => {
+    const iconProps = { size, color, strokeWidth: 1.5 };
+    switch (type) {
+      case 'desk-icon':
+        return <Square {...iconProps} />;
+      case 'chair-icon':
+        return <Armchair {...iconProps} />;
+      case 'toilet-icon':
+        return <DoorOpen {...iconProps} />;
+      case 'stairs-icon':
+        return <Building2 {...iconProps} />;
+      case 'exit-icon':
+        return <DoorOpen {...iconProps} />;
+      case 'elevator-icon':
+        return <Building2 {...iconProps} />;
+      case 'plant-icon':
+        return <TreePine {...iconProps} />;
+      case 'table-icon':
+        return <Table {...iconProps} />;
+      default:
+        return <Square {...iconProps} />;
+    }
+  };
+
+  // Handle design element click
+  const handleDesignElementClick = (elementId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setSelectedDesignElement(elementId);
+  };
+
+  // Handle design element drag
+  const handleDesignElementDrag = (elementId: string, event: React.MouseEvent) => {
+    if (!currentFloorPlan || selectedDesignElement !== elementId) return;
+
+    const element = (currentFloorPlan.designElements || []).find((e) => e.id === elementId);
+    if (!element || !canvasRef.current) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / zoom;
+    const y = (event.clientY - rect.top) / zoom;
+
+    const updatedElement: DesignElement = {
+      ...element,
+      x,
+      y,
+    };
+
+    updateDesignElement(selectedBuilding, selectedLevel as number, elementId, updatedElement);
   };
 
   // Handle resize start
@@ -703,7 +804,14 @@ export const InteractiveMapsForm: React.FC = () => {
                 onDragOver={(e) => e.preventDefault()}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
-                onClick={() => setSelectedOverlay(null)}
+                onClick={(e) => {
+                  if (editorMode === 'design' && selectedDesignTool) {
+                    handleDesignCanvasClick(e);
+                  } else {
+                    setSelectedOverlay(null);
+                    setSelectedDesignElement(null);
+                  }
+                }}
                 className="relative w-full bg-white dark:bg-dark-900 rounded-lg overflow-auto"
                 style={{
                   minHeight: '600px',
@@ -954,11 +1062,94 @@ export const InteractiveMapsForm: React.FC = () => {
                       </div>
                     );
                   })}
+
+                {/* Design Elements */}
+                {editorMode === 'design' && currentFloorPlan.designElements && currentFloorPlan.designElements.map((element) => {
+                  const isSelected = selectedDesignElement === element.id;
+
+                  if (element.type === 'text') {
+                    return (
+                      <div
+                        key={element.id}
+                        onClick={(e) => handleDesignElementClick(element.id, e)}
+                        onMouseMove={(e) => {
+                          if (e.buttons === 1) handleDesignElementDrag(element.id, e);
+                        }}
+                        className={`absolute cursor-move ${isSelected ? 'ring-2 ring-purple-500' : ''}`}
+                        style={{
+                          left: `${element.x}px`,
+                          top: `${element.y}px`,
+                          transform: `rotate(${element.rotation}deg)`,
+                          transformOrigin: 'center',
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: `${element.fontSize || 16}px`,
+                            fontWeight: element.fontWeight || 'normal',
+                            color: element.color || '#000',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {element.text}
+                        </span>
+                        {isSelected && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteDesignElement(selectedBuilding, selectedLevel as number, element.id);
+                              setSelectedDesignElement(null);
+                            }}
+                            className="absolute -top-6 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // Icon element
+                  return (
+                    <div
+                      key={element.id}
+                      onClick={(e) => handleDesignElementClick(element.id, e)}
+                      onMouseMove={(e) => {
+                        if (e.buttons === 1) handleDesignElementDrag(element.id, e);
+                      }}
+                      className={`absolute cursor-move ${isSelected ? 'ring-2 ring-purple-500 rounded-lg p-1' : ''}`}
+                      style={{
+                        left: `${element.x}px`,
+                        top: `${element.y}px`,
+                        transform: `rotate(${element.rotation}deg)`,
+                        transformOrigin: 'center',
+                      }}
+                    >
+                      <div style={{ color: element.color || '#333' }}>
+                        {renderIcon(element.type, element.size || 24, element.color || '#333')}
+                      </div>
+                      {isSelected && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteDesignElement(selectedBuilding, selectedLevel as number, element.id);
+                            setSelectedDesignElement(null);
+                          }}
+                          className="absolute -top-6 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
                 </div>
               </div>
 
               <div className="mt-4 text-sm text-gray-500 dark:text-gray-400 text-center">
-                Drag items from the sidebar to place them on the map. Click to select, drag to move, drag corners to resize, drag rotation handle to rotate. Click "Convert to Polygon" to add/move corner points for irregular shapes.
+                {editorMode === 'data'
+                  ? 'Drag items from the sidebar to place them on the map. Click to select, drag to move, drag corners to resize, drag rotation handle to rotate. Click "Convert to Polygon" to add/move corner points for irregular shapes.'
+                  : 'Click a tool in the sidebar, then click on the map to place it. Click elements to select and drag to move. Click the X button to delete.'}
               </div>
             </div>
           </div>
@@ -966,8 +1157,74 @@ export const InteractiveMapsForm: React.FC = () => {
           {/* Right Sidebar */}
           <div className="col-span-12 lg:col-span-4">
             <div className="glass rounded-xl p-4 sticky top-6">
-              {/* Tabs */}
-              <div className="flex gap-2 mb-4">
+              {editorMode === 'design' ? (
+                /* Design Mode Sidebar */
+                <>
+                  <h3 className="text-lg font-bold mb-4 gradient-text">Design Tools</h3>
+
+                  {/* Text Tool */}
+                  <div className="mb-6">
+                    <h4 className="text-sm font-medium mb-2">Text</h4>
+                    <button
+                      onClick={() => {
+                        setSelectedDesignTool('text');
+                        setIsEditingText(true);
+                      }}
+                      className={`w-full p-3 rounded-lg border-2 transition-all flex items-center gap-3 ${
+                        selectedDesignTool === 'text'
+                          ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-500'
+                          : 'bg-white dark:bg-dark-800 border-gray-300 dark:border-gray-600 hover:border-purple-300'
+                      }`}
+                    >
+                      <Type className="w-5 h-5" />
+                      <span>Add Text Label</span>
+                    </button>
+                  </div>
+
+                  {/* Icon Library */}
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">Icons</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { type: 'desk-icon' as DesignElementType, label: 'Desk', icon: <Square className="w-5 h-5" /> },
+                        { type: 'chair-icon' as DesignElementType, label: 'Chair', icon: <Armchair className="w-5 h-5" /> },
+                        { type: 'toilet-icon' as DesignElementType, label: 'Toilet', icon: <DoorOpen className="w-5 h-5" /> },
+                        { type: 'stairs-icon' as DesignElementType, label: 'Stairs', icon: <Building2 className="w-5 h-5" /> },
+                        { type: 'exit-icon' as DesignElementType, label: 'Exit', icon: <DoorOpen className="w-5 h-5" /> },
+                        { type: 'elevator-icon' as DesignElementType, label: 'Elevator', icon: <Building2 className="w-5 h-5" /> },
+                        { type: 'plant-icon' as DesignElementType, label: 'Plant', icon: <TreePine className="w-5 h-5" /> },
+                        { type: 'table-icon' as DesignElementType, label: 'Table', icon: <Table className="w-5 h-5" /> },
+                      ].map((tool) => (
+                        <button
+                          key={tool.type}
+                          onClick={() => setSelectedDesignTool(tool.type)}
+                          className={`p-3 rounded-lg border-2 transition-all flex flex-col items-center gap-2 ${
+                            selectedDesignTool === tool.type
+                              ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-500'
+                              : 'bg-white dark:bg-dark-800 border-gray-300 dark:border-gray-600 hover:border-purple-300'
+                          }`}
+                        >
+                          {tool.icon}
+                          <span className="text-xs">{tool.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Instructions */}
+                  <div className="mt-4 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                    <p className="text-xs text-purple-700 dark:text-purple-300">
+                      {selectedDesignTool
+                        ? 'Click on the map to place the selected tool'
+                        : 'Select a tool above to start designing'}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                /* Data Mode Sidebar */
+                <>
+                  {/* Tabs */}
+                  <div className="flex gap-2 mb-4">
                 <button
                   onClick={() => setSidebarTab('zones')}
                   className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all ${
@@ -1100,6 +1357,44 @@ export const InteractiveMapsForm: React.FC = () => {
                   </div>
                 )}
               </div>
+              </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Text Input Modal */}
+      {isEditingText && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setIsEditingText(false)}>
+          <div className="glass rounded-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-4">Add Text Label</h3>
+            <input
+              type="text"
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              placeholder="Enter text..."
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-dark-800 mb-4"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleAddText();
+                if (e.key === 'Escape') setIsEditingText(false);
+              }}
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setIsEditingText(false)}
+                className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-dark-700 hover:bg-gray-300 dark:hover:bg-dark-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddText}
+                disabled={!textInput.trim()}
+                className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Add Text
+              </button>
             </div>
           </div>
         </div>
