@@ -41,6 +41,13 @@ export const InteractiveMapsForm: React.FC = () => {
   const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
   const [rotationStart, setRotationStart] = useState<{ angle: number; mouseAngle: number } | null>(null);
 
+  // Design element resizing
+  const [isResizingDesignElement, setIsResizingDesignElement] = useState(false);
+  const [designElementResizeStart, setDesignElementResizeStart] = useState<{ size: number; mouseY: number } | null>(null);
+
+  // 3D view mode
+  const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
+
   // Zoom state
   const [zoom, setZoom] = useState(1);
 
@@ -355,7 +362,7 @@ export const InteractiveMapsForm: React.FC = () => {
 
   // Handle design element drag
   const handleDesignElementDrag = (elementId: string, event: React.MouseEvent) => {
-    if (!currentFloorPlan || selectedDesignElement !== elementId) return;
+    if (!currentFloorPlan || selectedDesignElement !== elementId || isResizingDesignElement) return;
 
     const element = (currentFloorPlan.designElements || []).find((e) => e.id === elementId);
     if (!element || !canvasRef.current) return;
@@ -373,6 +380,51 @@ export const InteractiveMapsForm: React.FC = () => {
     updateDesignElement(selectedBuilding, selectedLevel as number, elementId, updatedElement);
   };
 
+  // Handle design element resize start
+  const handleDesignElementResizeStart = (elementId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    const element = currentFloorPlan?.designElements?.find((e) => e.id === elementId);
+    if (!element) return;
+
+    setIsResizingDesignElement(true);
+    setSelectedDesignElement(elementId);
+    setDesignElementResizeStart({
+      size: element.size || 24,
+      mouseY: event.clientY,
+    });
+  };
+
+  // Handle design element resize
+  const handleDesignElementResize = (event: React.MouseEvent) => {
+    if (!isResizingDesignElement || !designElementResizeStart || !selectedDesignElement || !currentFloorPlan) return;
+
+    const element = currentFloorPlan.designElements?.find((e) => e.id === selectedDesignElement);
+    if (!element || element.type === 'text') return;
+
+    const deltaY = event.clientY - designElementResizeStart.mouseY;
+    const newSize = Math.max(12, Math.min(120, designElementResizeStart.size - deltaY / 2));
+
+    const updatedElement: DesignElement = {
+      ...element,
+      size: newSize,
+    };
+
+    updateDesignElement(selectedBuilding, selectedLevel as number, selectedDesignElement, updatedElement);
+  };
+
+  // Handle design element color change
+  const handleDesignElementColorChange = (elementId: string, color: string) => {
+    const element = currentFloorPlan?.designElements?.find((e) => e.id === elementId);
+    if (!element) return;
+
+    const updatedElement: DesignElement = {
+      ...element,
+      color,
+    };
+
+    updateDesignElement(selectedBuilding, selectedLevel as number, elementId, updatedElement);
+  };
+
   // Handle resize start
   const handleResizeStart = (overlayId: string, handle: string, event: React.MouseEvent) => {
     event.stopPropagation();
@@ -383,6 +435,12 @@ export const InteractiveMapsForm: React.FC = () => {
 
   // Handle mouse move for resizing and dragging
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    // Handle design element resizing
+    if (isResizingDesignElement) {
+      handleDesignElementResize(event);
+      return;
+    }
+
     if (!selectedOverlay || !currentFloorPlan || !canvasRef.current) return;
 
     const overlay = currentFloorPlan.overlays.find((o) => o.id === selectedOverlay);
@@ -481,6 +539,8 @@ export const InteractiveMapsForm: React.FC = () => {
     setResizeHandle('');
     setDragStartPos(null);
     setRotationStart(null);
+    setIsResizingDesignElement(false);
+    setDesignElementResizeStart(null);
   };
 
   // Handle export to SVG
@@ -685,32 +745,59 @@ export const InteractiveMapsForm: React.FC = () => {
 
       {/* Mode Switcher */}
       <div className="glass rounded-xl p-4">
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Editor Mode:</span>
-          <div className="flex gap-2">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
+          <div className="flex items-center gap-3 flex-1">
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Editor Mode:</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setEditorMode('data')}
+                className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                  editorMode === 'data'
+                    ? 'bg-gradient-to-r from-primary to-primary/80 dark:from-electric-cyan dark:to-electric-cyan/80 text-white shadow-lg'
+                    : 'bg-gray-100 dark:bg-dark-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-700'
+                }`}
+              >
+                <MapPin className="w-4 h-4" />
+                Data Mode
+                <span className="text-xs opacity-75">(Zones, Rooms, Desks)</span>
+              </button>
+              <button
+                onClick={() => setEditorMode('design')}
+                className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                  editorMode === 'design'
+                    ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg'
+                    : 'bg-gray-100 dark:bg-dark-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-700'
+                }`}
+              >
+                <Edit3 className="w-4 h-4" />
+                Design Mode
+                <span className="text-xs opacity-75">(Text, Icons, SVG Editing)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 3D View Toggle */}
+          <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-dark-700 rounded-lg">
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-400">View:</span>
             <button
-              onClick={() => setEditorMode('data')}
-              className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
-                editorMode === 'data'
-                  ? 'bg-gradient-to-r from-primary to-primary/80 dark:from-electric-cyan dark:to-electric-cyan/80 text-white shadow-lg'
-                  : 'bg-gray-100 dark:bg-dark-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-700'
+              onClick={() => setViewMode('2d')}
+              className={`px-3 py-1.5 rounded-md font-medium transition-all text-sm ${
+                viewMode === '2d'
+                  ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow'
+                  : 'bg-gray-200 dark:bg-dark-600 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-dark-500'
               }`}
             >
-              <MapPin className="w-4 h-4" />
-              Data Mode
-              <span className="text-xs opacity-75">(Zones, Rooms, Desks)</span>
+              2D
             </button>
             <button
-              onClick={() => setEditorMode('design')}
-              className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
-                editorMode === 'design'
-                  ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg'
-                  : 'bg-gray-100 dark:bg-dark-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-700'
+              onClick={() => setViewMode('3d')}
+              className={`px-3 py-1.5 rounded-md font-medium transition-all text-sm ${
+                viewMode === '3d'
+                  ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow'
+                  : 'bg-gray-200 dark:bg-dark-600 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-dark-500'
               }`}
             >
-              <Edit3 className="w-4 h-4" />
-              Design Mode
-              <span className="text-xs opacity-75">(Text, Icons, SVG Editing)</span>
+              3D
             </button>
           </div>
         </div>
@@ -889,14 +976,18 @@ export const InteractiveMapsForm: React.FC = () => {
                 className="relative w-full bg-white dark:bg-dark-900 rounded-lg overflow-auto"
                 style={{
                   minHeight: '600px',
-                  cursor: isResizing ? 'nwse-resize' : isDraggingOverlay ? 'grabbing' : isRotating ? 'grabbing' : 'default'
+                  cursor: isResizing ? 'nwse-resize' : isDraggingOverlay ? 'grabbing' : isRotating ? 'grabbing' : 'default',
+                  perspective: viewMode === '3d' ? '2000px' : undefined,
                 }}
               >
                 <div
                   className="relative origin-top-left"
                   style={{
-                    transform: `scale(${zoom})`,
+                    transform: viewMode === '3d'
+                      ? `scale(${zoom}) rotateX(45deg) rotateZ(-5deg) translateY(100px)`
+                      : `scale(${zoom})`,
                     transformOrigin: 'top left',
+                    transformStyle: viewMode === '3d' ? 'preserve-3d' : undefined,
                     width: '100%',
                     minHeight: '600px',
                   }}
@@ -1101,8 +1192,14 @@ export const InteractiveMapsForm: React.FC = () => {
                           width: `${overlay.width}px`,
                           height: `${overlay.height}px`,
                           cursor: isSelected && !isResizing && !isRotating ? 'move' : 'pointer',
-                          transform: `rotate(${overlay.rotation}deg)`,
+                          transform: viewMode === '3d' && overlay.type === 'desk'
+                            ? `rotate(${overlay.rotation}deg) translateZ(50px)`
+                            : `rotate(${overlay.rotation}deg)`,
                           transformOrigin: 'center',
+                          transformStyle: viewMode === '3d' ? 'preserve-3d' : undefined,
+                          boxShadow: viewMode === '3d' && overlay.type === 'desk'
+                            ? '0 4px 8px rgba(0, 0, 0, 0.3)'
+                            : undefined,
                         }}
                       >
                         {/* Rectangle Box */}
@@ -1240,35 +1337,51 @@ export const InteractiveMapsForm: React.FC = () => {
                   }
 
                   // Icon element
+                  const isFurniture = ['desk-icon', 'chair-icon', 'table-icon'].includes(element.type);
                   return (
                     <div
                       key={element.id}
                       onClick={(e) => handleDesignElementClick(element.id, e)}
                       onMouseMove={(e) => {
-                        if (e.buttons === 1) handleDesignElementDrag(element.id, e);
+                        if (e.buttons === 1 && !isResizingDesignElement) handleDesignElementDrag(element.id, e);
                       }}
                       className={`absolute cursor-move ${isSelected ? 'ring-2 ring-purple-500 rounded-lg p-1' : ''}`}
                       style={{
                         left: `${element.x}px`,
                         top: `${element.y}px`,
-                        transform: `rotate(${element.rotation}deg)`,
+                        transform: viewMode === '3d' && isFurniture
+                          ? `rotate(${element.rotation}deg) translateZ(40px)`
+                          : `rotate(${element.rotation}deg)`,
                         transformOrigin: 'center',
+                        transformStyle: viewMode === '3d' ? 'preserve-3d' : undefined,
+                        filter: viewMode === '3d' && isFurniture
+                          ? 'drop-shadow(0 3px 6px rgba(0, 0, 0, 0.3))'
+                          : undefined,
                       }}
                     >
                       <div style={{ color: element.color || '#333' }}>
                         {renderIcon(element.type, element.size || 24, element.color || '#333')}
                       </div>
                       {isSelected && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteDesignElement(selectedBuilding, selectedLevel as number, element.id);
-                            setSelectedDesignElement(null);
-                          }}
-                          className="absolute -top-6 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
+                        <>
+                          {/* Delete button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteDesignElement(selectedBuilding, selectedLevel as number, element.id);
+                              setSelectedDesignElement(null);
+                            }}
+                            className="absolute -top-6 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                          {/* Resize handle */}
+                          <div
+                            onMouseDown={(e) => handleDesignElementResizeStart(element.id, e)}
+                            className="absolute -bottom-2 -right-2 w-4 h-4 bg-purple-500 rounded-full cursor-ns-resize hover:bg-purple-600"
+                            title="Drag to resize"
+                          />
+                        </>
                       )}
                     </div>
                   );
@@ -1340,6 +1453,51 @@ export const InteractiveMapsForm: React.FC = () => {
                       ))}
                     </div>
                   </div>
+
+                  {/* Element Properties */}
+                  {selectedDesignElement && currentFloorPlan && currentFloorPlan.designElements && (
+                    <div className="mt-6">
+                      <h4 className="text-sm font-medium mb-2">Element Properties</h4>
+                      {(() => {
+                        const element = currentFloorPlan.designElements.find((e) => e.id === selectedDesignElement);
+                        if (!element) return null;
+
+                        return (
+                          <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800 space-y-3">
+                            <div>
+                              <label className="text-xs font-medium text-purple-700 dark:text-purple-300 block mb-1">
+                                Color
+                              </label>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="color"
+                                  value={element.color || '#333333'}
+                                  onChange={(e) => handleDesignElementColorChange(element.id, e.target.value)}
+                                  className="w-12 h-8 rounded cursor-pointer"
+                                />
+                                <input
+                                  type="text"
+                                  value={element.color || '#333333'}
+                                  onChange={(e) => handleDesignElementColorChange(element.id, e.target.value)}
+                                  className="flex-1 px-2 py-1 text-xs rounded border border-purple-300 dark:border-purple-600 bg-white dark:bg-dark-800"
+                                />
+                              </div>
+                            </div>
+                            {element.type !== 'text' && (
+                              <div>
+                                <label className="text-xs font-medium text-purple-700 dark:text-purple-300 block mb-1">
+                                  Size: {element.size || 24}px
+                                </label>
+                                <p className="text-xs text-purple-600 dark:text-purple-400">
+                                  Drag the resize handle to adjust
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
 
                   {/* SVG Editing Section */}
                   {currentFloorPlan && currentFloorPlan.fileType === 'svg' && currentFloorPlan.svgContent && (
