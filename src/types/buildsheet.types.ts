@@ -31,6 +31,31 @@ export interface InterfacesData {
 }
 
 // Tab 3: Interactive Maps
+export interface MapOverlay {
+  id: string; // e.g., "Desk-1.01" or "Room-1.001"
+  type: 'zone' | 'room' | 'desk';
+  x: number; // Position in pixels or percentage
+  y: number;
+  width: number;
+  height: number;
+  rotation?: number; // Optional rotation in degrees
+}
+
+export interface FloorPlan {
+  building: string;
+  level: number;
+  fileName: string;
+  fileType: 'svg' | 'pdf';
+  fileData: string; // Base64 encoded or data URL
+  overlays: MapOverlay[];
+}
+
+export interface InteractiveMapsData {
+  floorPlans: FloorPlan[];
+  notes: string;
+}
+
+// Legacy type for backward compatibility
 export interface InteractiveMapsChecklist {
   mapFileAvailable: boolean;
   fixedPointsIdentified: boolean;
@@ -280,7 +305,7 @@ export interface VisitorKioskInduction {
 export interface BuildSheetState {
   org: OrgData;
   interfaces: InterfacesData;
-  interactiveMaps: InteractiveMapsChecklist;
+  interactiveMaps: InteractiveMapsData;
   zones: ZonesDataArray;
   integrations: IntegrationsDataArray;
   userRequirements: UserRequirementsDataArray;

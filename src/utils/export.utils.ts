@@ -18,16 +18,25 @@ export const exportToExcel = (data: BuildSheetState): void => {
   }
 
   // Tab 3: Interactive Maps
-  const mapsData = [
-    ['Checklist Item', 'Status', 'Notes'],
-    ['Map File Available', data.interactiveMaps.mapFileAvailable ? 'Yes' : 'No', ''],
-    ['Fixed Points Identified', data.interactiveMaps.fixedPointsIdentified ? 'Yes' : 'No', ''],
-    ['Zones Identified', data.interactiveMaps.zonesIdentified ? 'Yes' : 'No', ''],
-    ['Sensor Locations Identified', data.interactiveMaps.sensorLocationsIdentified ? 'Yes' : 'No', ''],
-    ['Notes', '', data.interactiveMaps.notes],
-  ];
-  const mapsSheet = XLSX.utils.aoa_to_sheet(mapsData);
-  XLSX.utils.book_append_sheet(workbook, mapsSheet, 'Interactive Maps');
+  if (data.interactiveMaps.floorPlans.length > 0) {
+    const floorPlansData = data.interactiveMaps.floorPlans.map(fp => ({
+      building: fp.building,
+      level: fp.level,
+      fileName: fp.fileName,
+      fileType: fp.fileType,
+      overlaysCount: fp.overlays.length,
+    }));
+    const mapsSheet = XLSX.utils.json_to_sheet(floorPlansData);
+    XLSX.utils.book_append_sheet(workbook, mapsSheet, 'Interactive Maps');
+  } else if (data.interactiveMaps.notes) {
+    // If no floor plans but there are notes, export notes
+    const mapsData = [
+      ['Notes'],
+      [data.interactiveMaps.notes],
+    ];
+    const mapsSheet = XLSX.utils.aoa_to_sheet(mapsData);
+    XLSX.utils.book_append_sheet(workbook, mapsSheet, 'Interactive Maps');
+  }
 
   // Tab 4: Zones
   if (data.zones.length > 0) {

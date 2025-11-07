@@ -98,6 +98,7 @@ export const ZonesForm: React.FC = () => {
 
       const importedZones: ZoneData[] = data.map(line => {
         const values = line.split(',').map(v => v.trim());
+        const peopleCountingMethod = values[6] || '';
         return {
           building: values[0] || '',
           level: parseInt(values[1]) || 0,
@@ -105,7 +106,7 @@ export const ZonesForm: React.FC = () => {
           zoneCapacity: parseInt(values[3]) || 0,
           userGroups: values[4] || '',
           peopleCountingRequired: values[5]?.toUpperCase() === 'Y',
-          peopleCountingMethod: values[6] || '',
+          peopleCountingMethod: (peopleCountingMethod === 'Meraki' || peopleCountingMethod === 'DNA Spaces' || peopleCountingMethod === 'Other') ? peopleCountingMethod : '',
           peopleFindingRequired: values[7]?.toUpperCase() === 'Y',
           peopleFindingMethod: values[8] || '',
           firewardensLocatable: values[9]?.toUpperCase() === 'Y',

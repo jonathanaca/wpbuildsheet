@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Plus, Edit2, Trash2, CheckCircle, X, Check } from 'lucide-react';
 import { useBuildSheetStore } from '../../store/buildsheet.store';
-import type { OrgData, BuildingData } from '../../types/buildsheet.types';
+import type { BuildingData } from '../../types/buildsheet.types';
 import { CURRENCIES } from '../../types/buildsheet.types';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';

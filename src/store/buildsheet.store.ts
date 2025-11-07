@@ -4,7 +4,9 @@ import type {
   BuildSheetState,
   OrgData,
   InterfacesData,
-  InteractiveMapsChecklist,
+  InteractiveMapsData,
+  FloorPlan,
+  MapOverlay,
   ZonesDataArray,
   IntegrationsDataArray,
   UserRequirementsDataArray,
@@ -32,7 +34,13 @@ interface BuildSheetStore extends BuildSheetState {
   // Update methods for each tab
   updateOrg: (data: OrgData) => void;
   updateInterfaces: (data: InterfacesData) => void;
-  updateInteractiveMaps: (data: InteractiveMapsChecklist) => void;
+  updateInteractiveMaps: (data: InteractiveMapsData) => void;
+  addFloorPlan: (floorPlan: FloorPlan) => void;
+  updateFloorPlan: (building: string, level: number, floorPlan: FloorPlan) => void;
+  deleteFloorPlan: (building: string, level: number) => void;
+  addOverlay: (building: string, level: number, overlay: MapOverlay) => void;
+  updateOverlay: (building: string, level: number, overlayId: string, overlay: MapOverlay) => void;
+  deleteOverlay: (building: string, level: number, overlayId: string) => void;
   updateZones: (data: ZonesDataArray) => void;
   setZones: (data: ZonesDataArray) => void;
   updateIntegrations: (data: IntegrationsDataArray) => void;
@@ -118,10 +126,7 @@ const initialState: BuildSheetState = {
     ],
   },
   interactiveMaps: {
-    mapFileAvailable: false,
-    fixedPointsIdentified: false,
-    zonesIdentified: false,
-    sensorLocationsIdentified: false,
+    floorPlans: [],
     notes: '',
   },
   zones: [],
@@ -184,7 +189,69 @@ export const useBuildSheetStore = create<BuildSheetStore>()(
       },
 
       updateInterfaces: (data: InterfacesData) => set({ interfaces: data }),
-      updateInteractiveMaps: (data: InteractiveMapsChecklist) => set({ interactiveMaps: data }),
+      updateInteractiveMaps: (data: InteractiveMapsData) => set({ interactiveMaps: data }),
+
+      addFloorPlan: (floorPlan: FloorPlan) => set((state) => ({
+        interactiveMaps: {
+          ...state.interactiveMaps,
+          floorPlans: [...state.interactiveMaps.floorPlans, floorPlan],
+        },
+      })),
+
+      updateFloorPlan: (building: string, level: number, floorPlan: FloorPlan) => set((state) => ({
+        interactiveMaps: {
+          ...state.interactiveMaps,
+          floorPlans: state.interactiveMaps.floorPlans.map((fp) =>
+            fp.building === building && fp.level === level ? floorPlan : fp
+          ),
+        },
+      })),
+
+      deleteFloorPlan: (building: string, level: number) => set((state) => ({
+        interactiveMaps: {
+          ...state.interactiveMaps,
+          floorPlans: state.interactiveMaps.floorPlans.filter(
+            (fp) => !(fp.building === building && fp.level === level)
+          ),
+        },
+      })),
+
+      addOverlay: (building: string, level: number, overlay: MapOverlay) => set((state) => ({
+        interactiveMaps: {
+          ...state.interactiveMaps,
+          floorPlans: state.interactiveMaps.floorPlans.map((fp) =>
+            fp.building === building && fp.level === level
+              ? { ...fp, overlays: [...fp.overlays, overlay] }
+              : fp
+          ),
+        },
+      })),
+
+      updateOverlay: (building: string, level: number, overlayId: string, overlay: MapOverlay) => set((state) => ({
+        interactiveMaps: {
+          ...state.interactiveMaps,
+          floorPlans: state.interactiveMaps.floorPlans.map((fp) =>
+            fp.building === building && fp.level === level
+              ? {
+                  ...fp,
+                  overlays: fp.overlays.map((o) => (o.id === overlayId ? overlay : o)),
+                }
+              : fp
+          ),
+        },
+      })),
+
+      deleteOverlay: (building: string, level: number, overlayId: string) => set((state) => ({
+        interactiveMaps: {
+          ...state.interactiveMaps,
+          floorPlans: state.interactiveMaps.floorPlans.map((fp) =>
+            fp.building === building && fp.level === level
+              ? { ...fp, overlays: fp.overlays.filter((o) => o.id !== overlayId) }
+              : fp
+          ),
+        },
+      })),
+
       updateZones: (data: ZonesDataArray) => set({ zones: data }),
       setZones: (data: ZonesDataArray) => set({ zones: data }),
       updateIntegrations: (data: IntegrationsDataArray) => set({ integrations: data }),
@@ -279,14 +346,8 @@ export const useBuildSheetStore = create<BuildSheetStore>()(
           } else if (tabName === 'interfaces') {
             return (data as InterfacesData).buildings.length > 0 ? 100 : 0;
           } else if (tabName === 'interactiveMaps') {
-            const maps = data as InteractiveMapsChecklist;
-            const completed = [
-              maps.mapFileAvailable,
-              maps.fixedPointsIdentified,
-              maps.zonesIdentified,
-              maps.sensorLocationsIdentified,
-            ].filter(Boolean).length;
-            return (completed / 4) * 100;
+            const maps = data as InteractiveMapsData;
+            return maps.floorPlans.length > 0 ? 100 : 0;
           } else if (tabName === 'visitorKioskInduction') {
             const vki = data as VisitorKioskInduction;
             return vki.preferredInductionWording ? 100 : 0;

@@ -178,19 +178,19 @@ export const CarSpacesForm: React.FC = () => {
               label="Dedicated User"
               placeholder="john.smith@example.com"
               {...register('dedicatedUser')}
-              helpText="Leave empty if not dedicated to a specific user"
+              helperText="Leave empty if not dedicated to a specific user"
             />
             <Input
               label="User Groups (AD)"
               placeholder="Executives, Visitors"
               {...register('groups')}
-              helpText="Comma-separated AD groups"
+              helperText="Comma-separated AD groups"
             />
             <Input
               label="Features"
               placeholder="EV Charging, Covered, Disabled Access"
               {...register('features')}
-              helpText="Comma-separated list"
+              helperText="Comma-separated list"
             />
           </div>
         </div>

@@ -158,7 +158,7 @@ export const LockersForm: React.FC = () => {
                 ...zoneOptions,
               ]}
               error={errors.zone?.message}
-              helpText={zoneOptions.length === 0 && selectedBuilding ? 'No zones for this building' : undefined}
+              helperText={zoneOptions.length === 0 && selectedBuilding ? 'No zones for this building' : undefined}
             />
             <div className="flex items-center pt-6">
               <Checkbox
@@ -177,7 +177,7 @@ export const LockersForm: React.FC = () => {
               label="User Groups (AD)"
               placeholder="IT, Engineering"
               {...register('groups')}
-              helpText="Comma-separated AD groups"
+              helperText="Comma-separated AD groups"
             />
             <Select
               label="Book Locker Separate to Desk or With Desk?"
@@ -259,7 +259,7 @@ export const LockersForm: React.FC = () => {
                 { value: 'Auto approval', label: 'Auto Approval' },
                 { value: 'Manual approval', label: 'Manual Approval' },
               ]}
-              helpText="Must be same for all lockers"
+              helperText="Must be same for all lockers"
               error={errors.methodOfApproval?.message}
             />
           </div>
