@@ -1,10 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { useBuildSheetStore } from '../../store/buildsheet.store';
 import type { FloorPlan, MapOverlay } from '../../types/buildsheet.types';
-import { Upload, Download, Trash2, MapPin, Square, Home, ZoomIn, ZoomOut, Maximize2, Eye, EyeOff, RotateCw, Edit3, MousePointer } from 'lucide-react';
+import { Upload, Download, Trash2, MapPin, Square, Home, ZoomIn, ZoomOut, Maximize2, Eye, EyeOff, RotateCw, Edit3 } from 'lucide-react';
 
 type SidebarTab = 'zones' | 'rooms' | 'desks';
-type DrawingTool = 'select' | 'pen';
 
 export const InteractiveMapsForm: React.FC = () => {
   const org = useBuildSheetStore((state) => state.org);
@@ -41,10 +40,8 @@ export const InteractiveMapsForm: React.FC = () => {
     desks: true,
   });
 
-  // Drawing tool mode
-  const [drawingTool, setDrawingTool] = useState<DrawingTool>('select');
-  const [polygonPoints, setPolygonPoints] = useState<{ x: number; y: number }[]>([]);
-  const [isDrawingPolygon, setIsDrawingPolygon] = useState(false);
+  // Remember last resized dimensions
+  const [lastResizedSize, setLastResizedSize] = useState<{ width: number; height: number } | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -111,8 +108,9 @@ export const InteractiveMapsForm: React.FC = () => {
     if (!draggedItem || !currentFloorPlan || !canvasRef.current) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    // Account for zoom when calculating drop position
+    const x = (event.clientX - rect.left) / zoom;
+    const y = (event.clientY - rect.top) / zoom;
 
     // Check if overlay already exists
     const existingOverlay = currentFloorPlan.overlays.find((o) => o.id === draggedItem.id);
@@ -122,14 +120,37 @@ export const InteractiveMapsForm: React.FC = () => {
       return;
     }
 
+    // Determine size: use last resized size if available, otherwise defaults
+    let width: number;
+    let height: number;
+
+    if (lastResizedSize) {
+      // Use the last resized dimensions
+      width = lastResizedSize.width;
+      height = lastResizedSize.height;
+    } else {
+      // Default sizes - smaller for desks
+      if (draggedItem.type === 'zone') {
+        width = 200;
+        height = 150;
+      } else if (draggedItem.type === 'room') {
+        width = 80;
+        height = 60;
+      } else {
+        // Desks - much smaller by default
+        width = 40;
+        height = 30;
+      }
+    }
+
     const newOverlay: MapOverlay = {
       id: draggedItem.id,
       type: draggedItem.type,
-      shape: 'rectangle', // Always start with rectangle when dropping
+      shape: 'rectangle',
       x,
       y,
-      width: draggedItem.type === 'zone' ? 200 : 80,
-      height: draggedItem.type === 'zone' ? 150 : 60,
+      width,
+      height,
       rotation: 0,
       visible: true,
     };
@@ -200,69 +221,7 @@ export const InteractiveMapsForm: React.FC = () => {
     setRotationStart({ angle: overlay.rotation, mouseAngle });
   };
 
-  // Canvas click handler for polygon mode
-  const handleCanvasClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (drawingTool !== 'pen' || !canvasRef.current) return;
-
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / zoom;
-    const y = (event.clientY - rect.top) / zoom;
-
-    setPolygonPoints((prev) => [...prev, { x, y }]);
-    setIsDrawingPolygon(true);
-  };
-
-  // Complete polygon drawing
-  const completePolygon = () => {
-    if (polygonPoints.length < 3 || !draggedItem) {
-      alert('A polygon needs at least 3 points');
-      setPolygonPoints([]);
-      setIsDrawingPolygon(false);
-      return;
-    }
-
-    // Calculate bounding box for the polygon
-    const xs = polygonPoints.map((p) => p.x);
-    const ys = polygonPoints.map((p) => p.y);
-    const minX = Math.min(...xs);
-    const minY = Math.min(...ys);
-    const maxX = Math.max(...xs);
-    const maxY = Math.max(...ys);
-
-    // Normalize points to be relative to top-left corner
-    const normalizedPoints = polygonPoints.map((p) => ({
-      x: p.x - minX,
-      y: p.y - minY,
-    }));
-
-    const newOverlay: MapOverlay = {
-      id: draggedItem.id,
-      type: draggedItem.type,
-      shape: 'polygon',
-      x: minX,
-      y: minY,
-      width: maxX - minX,
-      height: maxY - minY,
-      rotation: 0,
-      points: normalizedPoints,
-      visible: true,
-    };
-
-    addOverlay(selectedBuilding, selectedLevel as number, newOverlay);
-    setPolygonPoints([]);
-    setIsDrawingPolygon(false);
-    setDraggedItem(null);
-    setDrawingTool('select');
-  };
-
-  // Cancel polygon drawing
-  const cancelPolygon = () => {
-    setPolygonPoints([]);
-    setIsDrawingPolygon(false);
-    setDraggedItem(null);
-  };
-
-  // Convert overlay to polygon mode
+  // Convert overlay to polygon mode (enables point editing)
   const convertToPolygon = (overlayId: string) => {
     if (!currentFloorPlan) return;
 
@@ -351,21 +310,25 @@ export const InteractiveMapsForm: React.FC = () => {
     let newX = overlay.x;
     let newY = overlay.y;
 
+    // Minimum sizes - smaller for desks
+    const minWidth = overlay.type === 'desk' ? 15 : 40;
+    const minHeight = overlay.type === 'desk' ? 15 : 30;
+
     // Resize based on handle
     if (resizeHandle.includes('e')) {
-      newWidth = Math.max(40, mouseX - overlay.x);
+      newWidth = Math.max(minWidth, mouseX - overlay.x);
     }
     if (resizeHandle.includes('s')) {
-      newHeight = Math.max(30, mouseY - overlay.y);
+      newHeight = Math.max(minHeight, mouseY - overlay.y);
     }
     if (resizeHandle.includes('w')) {
       const newRight = overlay.x + overlay.width;
-      newX = Math.min(mouseX, newRight - 40);
+      newX = Math.min(mouseX, newRight - minWidth);
       newWidth = newRight - newX;
     }
     if (resizeHandle.includes('n')) {
       const newBottom = overlay.y + overlay.height;
-      newY = Math.min(mouseY, newBottom - 30);
+      newY = Math.min(mouseY, newBottom - minHeight);
       newHeight = newBottom - newY;
     }
 
@@ -376,6 +339,9 @@ export const InteractiveMapsForm: React.FC = () => {
       width: newWidth,
       height: newHeight,
     };
+
+    // Remember the last resized size
+    setLastResizedSize({ width: newWidth, height: newHeight });
 
     updateOverlay(selectedBuilding, selectedLevel as number, selectedOverlay, updatedOverlay);
   };
@@ -642,39 +608,6 @@ export const InteractiveMapsForm: React.FC = () => {
                       <Maximize2 className="w-4 h-4" />
                     </button>
                   </div>
-
-                  {/* Drawing Tools */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setDrawingTool('select')}
-                      className={`px-3 py-2 rounded-lg font-medium flex items-center gap-2 transition-all ${
-                        drawingTool === 'select'
-                          ? 'bg-primary dark:bg-electric-cyan text-white'
-                          : 'bg-white dark:bg-dark-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-dark-700'
-                      }`}
-                      title="Select Tool"
-                    >
-                      <MousePointer className="w-4 h-4" />
-                      <span className="text-sm">Select</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setDrawingTool('pen');
-                        if (!draggedItem) {
-                          alert('Drag an item from the sidebar first, then use the pen tool to trace its shape by clicking points on the map.');
-                        }
-                      }}
-                      className={`px-3 py-2 rounded-lg font-medium flex items-center gap-2 transition-all ${
-                        drawingTool === 'pen'
-                          ? 'bg-primary dark:bg-electric-cyan text-white'
-                          : 'bg-white dark:bg-dark-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-dark-700'
-                      }`}
-                      title="Pen Tool (Polygon)"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                      <span className="text-sm">Pen</span>
-                    </button>
-                  </div>
                 </div>
 
                 {/* Layer Visibility Toggles */}
@@ -714,28 +647,6 @@ export const InteractiveMapsForm: React.FC = () => {
                     Desks
                   </button>
                 </div>
-
-                {/* Polygon Drawing Controls */}
-                {isDrawingPolygon && (
-                  <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700 rounded-lg">
-                    <span className="text-sm font-medium text-blue-700 dark:text-blue-300 flex-1">
-                      Drawing polygon: {polygonPoints.length} points. Click to add points.
-                    </span>
-                    <button
-                      onClick={completePolygon}
-                      disabled={polygonPoints.length < 3}
-                      className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Complete
-                    </button>
-                    <button
-                      onClick={cancelPolygon}
-                      className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                )}
               </div>
 
               <div
@@ -744,17 +655,11 @@ export const InteractiveMapsForm: React.FC = () => {
                 onDragOver={(e) => e.preventDefault()}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
-                onClick={(e) => {
-                  if (drawingTool === 'pen' && draggedItem) {
-                    handleCanvasClick(e);
-                  } else {
-                    setSelectedOverlay(null);
-                  }
-                }}
+                onClick={() => setSelectedOverlay(null)}
                 className="relative w-full bg-white dark:bg-dark-900 rounded-lg overflow-auto"
                 style={{
                   minHeight: '600px',
-                  cursor: isResizing ? 'nwse-resize' : isDraggingOverlay ? 'grabbing' : drawingTool === 'pen' ? 'crosshair' : 'default'
+                  cursor: isResizing ? 'nwse-resize' : isDraggingOverlay ? 'grabbing' : isRotating ? 'grabbing' : 'default'
                 }}
               >
                 <div
@@ -835,7 +740,7 @@ export const InteractiveMapsForm: React.FC = () => {
                           >
                             {overlay.id}
                           </text>
-                          {isSelected && drawingTool === 'select' && (
+                          {isSelected && (
                             <>
                               {/* Point handles for polygon */}
                               {overlay.points.map((p, idx) => (
@@ -894,13 +799,8 @@ export const InteractiveMapsForm: React.FC = () => {
                     return (
                       <div
                         key={overlay.id}
-                        onClick={(e) => {
-                          if (drawingTool === 'select') {
-                            handleOverlayClick(overlay.id, e);
-                          }
-                        }}
+                        onClick={(e) => handleOverlayClick(overlay.id, e)}
                         onMouseDown={(e) => {
-                          if (drawingTool !== 'select') return;
                           // Only start dragging if not clicking on a handle
                           if ((e.target as HTMLElement).classList.contains('resize-handle')) return;
                           if ((e.target as HTMLElement).classList.contains('rotate-handle')) return;
@@ -921,7 +821,7 @@ export const InteractiveMapsForm: React.FC = () => {
                       >
                         {/* Rectangle Box */}
                         <div
-                          className={`w-full h-full rounded border-2 flex items-center justify-center text-xs font-medium ${
+                          className={`w-full h-full rounded border-2 flex items-center justify-center font-medium ${
                             overlay.type === 'zone'
                               ? 'bg-purple-500/20 border-purple-500'
                               : overlay.type === 'room'
@@ -929,13 +829,19 @@ export const InteractiveMapsForm: React.FC = () => {
                               : 'bg-green-500/20 border-green-500'
                           }`}
                         >
-                          <span className="text-gray-900 dark:text-white px-1 text-center break-words">
+                          <span
+                            className="text-gray-900 dark:text-white px-1 text-center break-words"
+                            style={{
+                              fontSize: `${Math.max(8, Math.min(12, overlay.width / 6))}px`,
+                              lineHeight: '1.2'
+                            }}
+                          >
                             {overlay.id}
                           </span>
                         </div>
 
-                        {/* Controls (only in select mode) */}
-                        {isSelected && drawingTool === 'select' && (
+                        {/* Controls */}
+                        {isSelected && (
                           <>
                             {/* Resize Handles */}
                             {['nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'].map((handle) => (
@@ -1000,62 +906,11 @@ export const InteractiveMapsForm: React.FC = () => {
                       </div>
                     );
                   })}
-
-                {/* Polygon Drawing Preview */}
-                {isDrawingPolygon && polygonPoints.length > 0 && (
-                  <svg
-                    className="absolute inset-0 pointer-events-none"
-                    style={{ width: '100%', height: '100%' }}
-                  >
-                    {/* Draw lines between points */}
-                    {polygonPoints.map((point, idx) => {
-                      if (idx === 0) return null;
-                      const prevPoint = polygonPoints[idx - 1];
-                      return (
-                        <line
-                          key={idx}
-                          x1={prevPoint.x}
-                          y1={prevPoint.y}
-                          x2={point.x}
-                          y2={point.y}
-                          stroke="#3b82f6"
-                          strokeWidth="2"
-                          strokeDasharray="4"
-                        />
-                      );
-                    })}
-                    {/* Draw points */}
-                    {polygonPoints.map((point, idx) => (
-                      <circle
-                        key={idx}
-                        cx={point.x}
-                        cy={point.y}
-                        r="5"
-                        fill="#3b82f6"
-                        stroke="white"
-                        strokeWidth="2"
-                      />
-                    ))}
-                    {/* Close preview line to first point if we have more than 2 points */}
-                    {polygonPoints.length > 2 && (
-                      <line
-                        x1={polygonPoints[polygonPoints.length - 1].x}
-                        y1={polygonPoints[polygonPoints.length - 1].y}
-                        x2={polygonPoints[0].x}
-                        y2={polygonPoints[0].y}
-                        stroke="#3b82f6"
-                        strokeWidth="2"
-                        strokeDasharray="4"
-                        opacity="0.5"
-                      />
-                    )}
-                  </svg>
-                )}
                 </div>
               </div>
 
               <div className="mt-4 text-sm text-gray-500 dark:text-gray-400 text-center">
-                Drag items from the sidebar to place them on the map. Click overlay to select, drag to move, drag corners to resize.
+                Drag items from the sidebar to place them on the map. Click to select, drag to move, drag corners to resize, drag rotation handle to rotate. Click "Convert to Polygon" to add/move corner points for irregular shapes.
               </div>
             </div>
           </div>
