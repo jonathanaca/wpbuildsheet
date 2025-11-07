@@ -34,11 +34,16 @@ export interface InterfacesData {
 export interface MapOverlay {
   id: string; // e.g., "Desk-1.01" or "Room-1.001"
   type: 'zone' | 'room' | 'desk';
-  x: number; // Position in pixels or percentage
+  shape: 'rectangle' | 'polygon'; // Shape type
+  // Rectangle properties
+  x: number; // Position in pixels (top-left corner)
   y: number;
   width: number;
   height: number;
-  rotation?: number; // Optional rotation in degrees
+  rotation: number; // Rotation in degrees (0-360)
+  // Polygon properties (for irregular shapes)
+  points?: { x: number; y: number }[]; // Array of points for polygon mode
+  visible?: boolean; // Layer visibility (default true)
 }
 
 export interface FloorPlan {

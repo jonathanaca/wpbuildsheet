@@ -1,9 +1,10 @@
 import React, { useState, useRef } from 'react';
 import { useBuildSheetStore } from '../../store/buildsheet.store';
 import type { FloorPlan, MapOverlay } from '../../types/buildsheet.types';
-import { Upload, Download, Trash2, MapPin, Square, Home, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { Upload, Download, Trash2, MapPin, Square, Home, ZoomIn, ZoomOut, Maximize2, Eye, EyeOff, RotateCw, Edit3, MousePointer } from 'lucide-react';
 
 type SidebarTab = 'zones' | 'rooms' | 'desks';
+type DrawingTool = 'select' | 'pen';
 
 export const InteractiveMapsForm: React.FC = () => {
   const org = useBuildSheetStore((state) => state.org);
@@ -25,11 +26,25 @@ export const InteractiveMapsForm: React.FC = () => {
   const [selectedOverlay, setSelectedOverlay] = useState<string | null>(null);
   const [isResizing, setIsResizing] = useState(false);
   const [isDraggingOverlay, setIsDraggingOverlay] = useState(false);
+  const [isRotating, setIsRotating] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<string>('');
   const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
+  const [rotationStart, setRotationStart] = useState<{ angle: number; mouseAngle: number } | null>(null);
 
   // Zoom state
   const [zoom, setZoom] = useState(1);
+
+  // Layer visibility
+  const [layersVisible, setLayersVisible] = useState({
+    zones: true,
+    rooms: true,
+    desks: true,
+  });
+
+  // Drawing tool mode
+  const [drawingTool, setDrawingTool] = useState<DrawingTool>('select');
+  const [polygonPoints, setPolygonPoints] = useState<{ x: number; y: number }[]>([]);
+  const [isDrawingPolygon, setIsDrawingPolygon] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -110,11 +125,13 @@ export const InteractiveMapsForm: React.FC = () => {
     const newOverlay: MapOverlay = {
       id: draggedItem.id,
       type: draggedItem.type,
+      shape: 'rectangle', // Always start with rectangle when dropping
       x,
       y,
       width: draggedItem.type === 'zone' ? 200 : 80,
       height: draggedItem.type === 'zone' ? 150 : 60,
       rotation: 0,
+      visible: true,
     };
 
     addOverlay(selectedBuilding, selectedLevel as number, newOverlay);
@@ -159,6 +176,117 @@ export const InteractiveMapsForm: React.FC = () => {
     setSelectedOverlay(null);
   };
 
+  // Layer visibility toggle
+  const toggleLayerVisibility = (layer: 'zones' | 'rooms' | 'desks') => {
+    setLayersVisible((prev) => ({ ...prev, [layer]: !prev[layer] }));
+  };
+
+  // Handle rotation start
+  const handleRotationStart = (overlayId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setSelectedOverlay(overlayId);
+    setIsRotating(true);
+
+    const overlay = currentFloorPlan?.overlays.find((o) => o.id === overlayId);
+    if (!overlay || !canvasRef.current) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const centerX = overlay.x + overlay.width / 2;
+    const centerY = overlay.y + overlay.height / 2;
+    const mouseX = (event.clientX - rect.left) / zoom;
+    const mouseY = (event.clientY - rect.top) / zoom;
+
+    const mouseAngle = Math.atan2(mouseY - centerY, mouseX - centerX) * (180 / Math.PI);
+    setRotationStart({ angle: overlay.rotation, mouseAngle });
+  };
+
+  // Canvas click handler for polygon mode
+  const handleCanvasClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (drawingTool !== 'pen' || !canvasRef.current) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / zoom;
+    const y = (event.clientY - rect.top) / zoom;
+
+    setPolygonPoints((prev) => [...prev, { x, y }]);
+    setIsDrawingPolygon(true);
+  };
+
+  // Complete polygon drawing
+  const completePolygon = () => {
+    if (polygonPoints.length < 3 || !draggedItem) {
+      alert('A polygon needs at least 3 points');
+      setPolygonPoints([]);
+      setIsDrawingPolygon(false);
+      return;
+    }
+
+    // Calculate bounding box for the polygon
+    const xs = polygonPoints.map((p) => p.x);
+    const ys = polygonPoints.map((p) => p.y);
+    const minX = Math.min(...xs);
+    const minY = Math.min(...ys);
+    const maxX = Math.max(...xs);
+    const maxY = Math.max(...ys);
+
+    // Normalize points to be relative to top-left corner
+    const normalizedPoints = polygonPoints.map((p) => ({
+      x: p.x - minX,
+      y: p.y - minY,
+    }));
+
+    const newOverlay: MapOverlay = {
+      id: draggedItem.id,
+      type: draggedItem.type,
+      shape: 'polygon',
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+      rotation: 0,
+      points: normalizedPoints,
+      visible: true,
+    };
+
+    addOverlay(selectedBuilding, selectedLevel as number, newOverlay);
+    setPolygonPoints([]);
+    setIsDrawingPolygon(false);
+    setDraggedItem(null);
+    setDrawingTool('select');
+  };
+
+  // Cancel polygon drawing
+  const cancelPolygon = () => {
+    setPolygonPoints([]);
+    setIsDrawingPolygon(false);
+    setDraggedItem(null);
+  };
+
+  // Convert overlay to polygon mode
+  const convertToPolygon = (overlayId: string) => {
+    if (!currentFloorPlan) return;
+
+    const overlay = currentFloorPlan.overlays.find((o) => o.id === overlayId);
+    if (!overlay || overlay.shape === 'polygon') return;
+
+    // Create rectangle corners as polygon points
+    const points = [
+      { x: 0, y: 0 },
+      { x: overlay.width, y: 0 },
+      { x: overlay.width, y: overlay.height },
+      { x: 0, y: overlay.height },
+    ];
+
+    const updatedOverlay: MapOverlay = {
+      ...overlay,
+      shape: 'polygon',
+      points,
+      rotation: 0, // Reset rotation when converting to polygon
+    };
+
+    updateOverlay(selectedBuilding, selectedLevel as number, overlayId, updatedOverlay);
+  };
+
   // Handle resize start
   const handleResizeStart = (overlayId: string, handle: string, event: React.MouseEvent) => {
     event.stopPropagation();
@@ -191,6 +319,27 @@ export const InteractiveMapsForm: React.FC = () => {
 
       updateOverlay(selectedBuilding, selectedLevel as number, selectedOverlay, updatedOverlay);
       setDragStartPos({ x: mouseX, y: mouseY });
+      return;
+    }
+
+    // Handle rotation
+    if (isRotating && rotationStart) {
+      const centerX = overlay.x + overlay.width / 2;
+      const centerY = overlay.y + overlay.height / 2;
+      const currentMouseAngle = Math.atan2(mouseY - centerY, mouseX - centerX) * (180 / Math.PI);
+      const angleDelta = currentMouseAngle - rotationStart.mouseAngle;
+      let newRotation = rotationStart.angle + angleDelta;
+
+      // Normalize rotation to 0-360
+      while (newRotation < 0) newRotation += 360;
+      while (newRotation >= 360) newRotation -= 360;
+
+      const updatedOverlay: MapOverlay = {
+        ...overlay,
+        rotation: newRotation,
+      };
+
+      updateOverlay(selectedBuilding, selectedLevel as number, selectedOverlay, updatedOverlay);
       return;
     }
 
@@ -231,12 +380,14 @@ export const InteractiveMapsForm: React.FC = () => {
     updateOverlay(selectedBuilding, selectedLevel as number, selectedOverlay, updatedOverlay);
   };
 
-  // Handle mouse up to stop resizing and dragging
+  // Handle mouse up to stop resizing, dragging, and rotating
   const handleMouseUp = () => {
     setIsResizing(false);
     setIsDraggingOverlay(false);
+    setIsRotating(false);
     setResizeHandle('');
     setDragStartPos(null);
+    setRotationStart(null);
   };
 
   // Handle export to SVG
@@ -268,34 +419,82 @@ export const InteractiveMapsForm: React.FC = () => {
     overlaysGroup.setAttribute('id', 'placeos-overlays');
 
     currentFloorPlan.overlays.forEach((overlay) => {
+      // Skip invisible overlays
+      if (overlay.visible === false) return;
+
       const group = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'g');
       group.setAttribute('id', overlay.id);
       group.setAttribute('data-type', overlay.type);
+      group.setAttribute('data-shape', overlay.shape);
 
-      // Rectangle
-      const rect = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      rect.setAttribute('x', overlay.x.toString());
-      rect.setAttribute('y', overlay.y.toString());
-      rect.setAttribute('width', overlay.width.toString());
-      rect.setAttribute('height', overlay.height.toString());
-      rect.setAttribute('fill', 'rgba(100, 100, 100, 0.3)');
-      rect.setAttribute('stroke', '#333');
-      rect.setAttribute('stroke-width', '2');
-      rect.setAttribute('class', 'placeos-overlay-box');
+      if (overlay.shape === 'polygon' && overlay.points) {
+        // Polygon shape
+        const polygon = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        const pointsString = overlay.points
+          .map((p) => `${overlay.x + p.x},${overlay.y + p.y}`)
+          .join(' ');
+        polygon.setAttribute('points', pointsString);
+        polygon.setAttribute('fill', 'rgba(100, 100, 100, 0.3)');
+        polygon.setAttribute('stroke', '#333');
+        polygon.setAttribute('stroke-width', '2');
+        polygon.setAttribute('class', 'placeos-overlay-box');
 
-      // Text label
-      const text = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'text');
-      text.setAttribute('x', (overlay.x + overlay.width / 2).toString());
-      text.setAttribute('y', (overlay.y + overlay.height / 2).toString());
-      text.setAttribute('text-anchor', 'middle');
-      text.setAttribute('dominant-baseline', 'middle');
-      text.setAttribute('font-size', '12');
-      text.setAttribute('fill', '#000');
-      text.setAttribute('class', 'placeos-overlay-label');
-      text.textContent = overlay.id;
+        group.appendChild(polygon);
 
-      group.appendChild(rect);
-      group.appendChild(text);
+        // Text label at center of bounding box
+        const text = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', (overlay.x + overlay.width / 2).toString());
+        text.setAttribute('y', (overlay.y + overlay.height / 2).toString());
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('font-size', '12');
+        text.setAttribute('fill', '#000');
+        text.setAttribute('class', 'placeos-overlay-label');
+        text.textContent = overlay.id;
+
+        group.appendChild(text);
+      } else {
+        // Rectangle shape with rotation
+        const rect = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', overlay.x.toString());
+        rect.setAttribute('y', overlay.y.toString());
+        rect.setAttribute('width', overlay.width.toString());
+        rect.setAttribute('height', overlay.height.toString());
+        rect.setAttribute('fill', 'rgba(100, 100, 100, 0.3)');
+        rect.setAttribute('stroke', '#333');
+        rect.setAttribute('stroke-width', '2');
+        rect.setAttribute('class', 'placeos-overlay-box');
+
+        // Apply rotation transform if needed
+        if (overlay.rotation && overlay.rotation !== 0) {
+          const centerX = overlay.x + overlay.width / 2;
+          const centerY = overlay.y + overlay.height / 2;
+          rect.setAttribute('transform', `rotate(${overlay.rotation} ${centerX} ${centerY})`);
+        }
+
+        group.appendChild(rect);
+
+        // Text label
+        const text = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', (overlay.x + overlay.width / 2).toString());
+        text.setAttribute('y', (overlay.y + overlay.height / 2).toString());
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('font-size', '12');
+        text.setAttribute('fill', '#000');
+        text.setAttribute('class', 'placeos-overlay-label');
+        text.textContent = overlay.id;
+
+        // Apply same rotation to text
+        if (overlay.rotation && overlay.rotation !== 0) {
+          const centerX = overlay.x + overlay.width / 2;
+          const centerY = overlay.y + overlay.height / 2;
+          text.setAttribute('transform', `rotate(${overlay.rotation} ${centerX} ${centerY})`);
+        }
+
+        group.appendChild(text);
+      }
+
       overlaysGroup.appendChild(group);
     });
 
@@ -411,36 +610,132 @@ export const InteractiveMapsForm: React.FC = () => {
           {/* Canvas Area */}
           <div className="col-span-12 lg:col-span-8">
             <div className="glass rounded-xl p-4">
-              {/* Zoom Controls */}
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
+              {/* Toolbar */}
+              <div className="space-y-3 mb-4">
+                {/* Zoom Controls */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleZoomOut}
+                      disabled={zoom <= 0.25}
+                      className="p-2 bg-white dark:bg-dark-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      title="Zoom Out"
+                    >
+                      <ZoomOut className="w-4 h-4" />
+                    </button>
+                    <span className="text-sm font-medium px-3 py-1 bg-white dark:bg-dark-800 border border-gray-300 dark:border-gray-600 rounded-lg min-w-[70px] text-center">
+                      {Math.round(zoom * 100)}%
+                    </span>
+                    <button
+                      onClick={handleZoomIn}
+                      disabled={zoom >= 3}
+                      className="p-2 bg-white dark:bg-dark-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      title="Zoom In"
+                    >
+                      <ZoomIn className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={handleResetZoom}
+                      className="p-2 bg-white dark:bg-dark-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-700 transition-colors"
+                      title="Reset Zoom"
+                    >
+                      <Maximize2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Drawing Tools */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setDrawingTool('select')}
+                      className={`px-3 py-2 rounded-lg font-medium flex items-center gap-2 transition-all ${
+                        drawingTool === 'select'
+                          ? 'bg-primary dark:bg-electric-cyan text-white'
+                          : 'bg-white dark:bg-dark-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-dark-700'
+                      }`}
+                      title="Select Tool"
+                    >
+                      <MousePointer className="w-4 h-4" />
+                      <span className="text-sm">Select</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDrawingTool('pen');
+                        if (!draggedItem) {
+                          alert('Drag an item from the sidebar first, then use the pen tool to trace its shape by clicking points on the map.');
+                        }
+                      }}
+                      className={`px-3 py-2 rounded-lg font-medium flex items-center gap-2 transition-all ${
+                        drawingTool === 'pen'
+                          ? 'bg-primary dark:bg-electric-cyan text-white'
+                          : 'bg-white dark:bg-dark-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-dark-700'
+                      }`}
+                      title="Pen Tool (Polygon)"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                      <span className="text-sm">Pen</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Layer Visibility Toggles */}
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Layers:</span>
                   <button
-                    onClick={handleZoomOut}
-                    disabled={zoom <= 0.25}
-                    className="p-2 bg-white dark:bg-dark-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    title="Zoom Out"
+                    onClick={() => toggleLayerVisibility('zones')}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
+                      layersVisible.zones
+                        ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700'
+                        : 'bg-gray-100 dark:bg-dark-800 text-gray-400 border border-gray-300 dark:border-gray-600'
+                    }`}
                   >
-                    <ZoomOut className="w-4 h-4" />
+                    {layersVisible.zones ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                    Zones
                   </button>
-                  <span className="text-sm font-medium px-3 py-1 bg-white dark:bg-dark-800 border border-gray-300 dark:border-gray-600 rounded-lg min-w-[70px] text-center">
-                    {Math.round(zoom * 100)}%
-                  </span>
                   <button
-                    onClick={handleZoomIn}
-                    disabled={zoom >= 3}
-                    className="p-2 bg-white dark:bg-dark-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    title="Zoom In"
+                    onClick={() => toggleLayerVisibility('rooms')}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
+                      layersVisible.rooms
+                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
+                        : 'bg-gray-100 dark:bg-dark-800 text-gray-400 border border-gray-300 dark:border-gray-600'
+                    }`}
                   >
-                    <ZoomIn className="w-4 h-4" />
+                    {layersVisible.rooms ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                    Rooms
                   </button>
                   <button
-                    onClick={handleResetZoom}
-                    className="p-2 bg-white dark:bg-dark-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-700 transition-colors"
-                    title="Reset Zoom"
+                    onClick={() => toggleLayerVisibility('desks')}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
+                      layersVisible.desks
+                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700'
+                        : 'bg-gray-100 dark:bg-dark-800 text-gray-400 border border-gray-300 dark:border-gray-600'
+                    }`}
                   >
-                    <Maximize2 className="w-4 h-4" />
+                    {layersVisible.desks ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                    Desks
                   </button>
                 </div>
+
+                {/* Polygon Drawing Controls */}
+                {isDrawingPolygon && (
+                  <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700 rounded-lg">
+                    <span className="text-sm font-medium text-blue-700 dark:text-blue-300 flex-1">
+                      Drawing polygon: {polygonPoints.length} points. Click to add points.
+                    </span>
+                    <button
+                      onClick={completePolygon}
+                      disabled={polygonPoints.length < 3}
+                      className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Complete
+                    </button>
+                    <button
+                      onClick={cancelPolygon}
+                      className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div
@@ -449,11 +744,17 @@ export const InteractiveMapsForm: React.FC = () => {
                 onDragOver={(e) => e.preventDefault()}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
-                onClick={() => setSelectedOverlay(null)}
+                onClick={(e) => {
+                  if (drawingTool === 'pen' && draggedItem) {
+                    handleCanvasClick(e);
+                  } else {
+                    setSelectedOverlay(null);
+                  }
+                }}
                 className="relative w-full bg-white dark:bg-dark-900 rounded-lg overflow-auto"
                 style={{
                   minHeight: '600px',
-                  cursor: isResizing ? 'nwse-resize' : isDraggingOverlay ? 'grabbing' : 'default'
+                  cursor: isResizing ? 'nwse-resize' : isDraggingOverlay ? 'grabbing' : drawingTool === 'pen' ? 'crosshair' : 'default'
                 }}
               >
                 <div
@@ -482,80 +783,274 @@ export const InteractiveMapsForm: React.FC = () => {
                   </div>
                 )}
 
-                {/* Overlays */}
-                {currentFloorPlan.overlays.map((overlay) => {
-                  const isSelected = selectedOverlay === overlay.id;
-                  return (
-                    <div
-                      key={overlay.id}
-                      onClick={(e) => handleOverlayClick(overlay.id, e)}
-                      onMouseDown={(e) => {
-                        // Only start dragging if not clicking on a resize handle
-                        if ((e.target as HTMLElement).classList.contains('resize-handle')) return;
-                        handleOverlayDragStart(overlay.id, e);
-                      }}
-                      className={`absolute ${
-                        isSelected ? 'ring-2 ring-primary dark:ring-electric-cyan' : ''
-                      }`}
-                      style={{
-                        left: `${overlay.x}px`,
-                        top: `${overlay.y}px`,
-                        width: `${overlay.width}px`,
-                        height: `${overlay.height}px`,
-                        cursor: isSelected && !isResizing ? 'move' : 'pointer',
-                      }}
-                    >
-                      {/* Overlay Box */}
-                      <div
-                        className={`w-full h-full rounded border-2 flex items-center justify-center text-xs font-medium ${
-                          overlay.type === 'zone'
-                            ? 'bg-purple-500/20 border-purple-500'
-                            : overlay.type === 'room'
-                            ? 'bg-blue-500/20 border-blue-500'
-                            : 'bg-green-500/20 border-green-500'
-                        }`}
-                      >
-                        <span className="text-gray-900 dark:text-white px-1 text-center break-words">
-                          {overlay.id}
-                        </span>
-                      </div>
+                {/* SVG Layer for Polygons */}
+                <svg
+                  className="absolute inset-0 pointer-events-none"
+                  style={{ width: '100%', height: '100%' }}
+                >
+                  {currentFloorPlan.overlays
+                    .filter((overlay) => {
+                      if (overlay.shape !== 'polygon') return false;
+                      if (overlay.type === 'zone' && !layersVisible.zones) return false;
+                      if (overlay.type === 'room' && !layersVisible.rooms) return false;
+                      if (overlay.type === 'desk' && !layersVisible.desks) return false;
+                      return true;
+                    })
+                    .map((overlay) => {
+                      if (!overlay.points) return null;
+                      const isSelected = selectedOverlay === overlay.id;
+                      const centerX = overlay.x + overlay.width / 2;
+                      const centerY = overlay.y + overlay.height / 2;
+                      const pointsString = overlay.points
+                        .map((p) => `${overlay.x + p.x},${overlay.y + p.y}`)
+                        .join(' ');
 
-                      {/* Resize Handles */}
-                      {isSelected && (
-                        <>
-                          {['nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'].map((handle) => (
-                            <div
-                              key={handle}
-                              onMouseDown={(e) => handleResizeStart(overlay.id, handle, e)}
-                              className={`resize-handle absolute w-3 h-3 bg-primary dark:bg-electric-cyan border border-white rounded-full cursor-${handle}-resize`}
-                              style={{
-                                ...(handle.includes('n') && { top: '-6px' }),
-                                ...(handle.includes('s') && { bottom: '-6px' }),
-                                ...(handle.includes('w') && { left: '-6px' }),
-                                ...(handle.includes('e') && { right: '-6px' }),
-                                ...(handle === 'n' && { left: '50%', transform: 'translateX(-50%)' }),
-                                ...(handle === 's' && { left: '50%', transform: 'translateX(-50%)' }),
-                                ...(handle === 'w' && { top: '50%', transform: 'translateY(-50%)' }),
-                                ...(handle === 'e' && { top: '50%', transform: 'translateY(-50%)' }),
-                              }}
-                            />
-                          ))}
-
-                          {/* Delete Button */}
-                          <button
-                            onClick={(e) => {
+                      return (
+                        <g key={overlay.id} className="pointer-events-auto">
+                          <polygon
+                            points={pointsString}
+                            className={`cursor-pointer ${
+                              overlay.type === 'zone'
+                                ? 'fill-purple-500/20 stroke-purple-500'
+                                : overlay.type === 'room'
+                                ? 'fill-blue-500/20 stroke-blue-500'
+                                : 'fill-green-500/20 stroke-green-500'
+                            }`}
+                            strokeWidth="2"
+                            onClick={(e: any) => {
                               e.stopPropagation();
-                              handleDeleteOverlay(overlay.id);
+                              handleOverlayClick(overlay.id, e);
                             }}
-                            className="absolute -top-8 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                            onMouseDown={(e: any) => {
+                              e.stopPropagation();
+                              handleOverlayDragStart(overlay.id, e);
+                            }}
+                          />
+                          <text
+                            x={centerX}
+                            y={centerY}
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                            className="text-xs font-medium fill-gray-900 dark:fill-white pointer-events-none"
                           >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
+                            {overlay.id}
+                          </text>
+                          {isSelected && drawingTool === 'select' && (
+                            <>
+                              {/* Point handles for polygon */}
+                              {overlay.points.map((p, idx) => (
+                                <circle
+                                  key={idx}
+                                  cx={overlay.x + p.x}
+                                  cy={overlay.y + p.y}
+                                  r="4"
+                                  className="fill-primary dark:fill-electric-cyan stroke-white cursor-move pointer-events-auto"
+                                  strokeWidth="1"
+                                />
+                              ))}
+                              {/* Delete button for polygon */}
+                              <g transform={`translate(${overlay.x - 10}, ${overlay.y - 30})`} className="pointer-events-auto">
+                                <circle cx="12" cy="12" r="10" fill="#ef4444" className="cursor-pointer" />
+                                <path
+                                  d="M8 8 L16 16 M16 8 L8 16"
+                                  stroke="white"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  className="pointer-events-none"
+                                />
+                                <circle
+                                  cx="12"
+                                  cy="12"
+                                  r="12"
+                                  fill="transparent"
+                                  className="cursor-pointer"
+                                  onClick={(e: any) => {
+                                    e.stopPropagation();
+                                    handleDeleteOverlay(overlay.id);
+                                  }}
+                                />
+                              </g>
+                            </>
+                          )}
+                        </g>
+                      );
+                    })}
+                </svg>
+
+                {/* Rectangle Overlays */}
+                {currentFloorPlan.overlays
+                  .filter((overlay) => {
+                    if (overlay.shape === 'polygon') return false; // Rendered in SVG layer
+                    // Filter by layer visibility
+                    if (overlay.type === 'zone' && !layersVisible.zones) return false;
+                    if (overlay.type === 'room' && !layersVisible.rooms) return false;
+                    if (overlay.type === 'desk' && !layersVisible.desks) return false;
+                    return true;
+                  })
+                  .map((overlay) => {
+                    const isSelected = selectedOverlay === overlay.id;
+
+                    // Render rectangle
+                    return (
+                      <div
+                        key={overlay.id}
+                        onClick={(e) => {
+                          if (drawingTool === 'select') {
+                            handleOverlayClick(overlay.id, e);
+                          }
+                        }}
+                        onMouseDown={(e) => {
+                          if (drawingTool !== 'select') return;
+                          // Only start dragging if not clicking on a handle
+                          if ((e.target as HTMLElement).classList.contains('resize-handle')) return;
+                          if ((e.target as HTMLElement).classList.contains('rotate-handle')) return;
+                          handleOverlayDragStart(overlay.id, e);
+                        }}
+                        className={`absolute ${
+                          isSelected ? 'ring-2 ring-primary dark:ring-electric-cyan' : ''
+                        }`}
+                        style={{
+                          left: `${overlay.x}px`,
+                          top: `${overlay.y}px`,
+                          width: `${overlay.width}px`,
+                          height: `${overlay.height}px`,
+                          cursor: isSelected && !isResizing && !isRotating ? 'move' : 'pointer',
+                          transform: `rotate(${overlay.rotation}deg)`,
+                          transformOrigin: 'center',
+                        }}
+                      >
+                        {/* Rectangle Box */}
+                        <div
+                          className={`w-full h-full rounded border-2 flex items-center justify-center text-xs font-medium ${
+                            overlay.type === 'zone'
+                              ? 'bg-purple-500/20 border-purple-500'
+                              : overlay.type === 'room'
+                              ? 'bg-blue-500/20 border-blue-500'
+                              : 'bg-green-500/20 border-green-500'
+                          }`}
+                        >
+                          <span className="text-gray-900 dark:text-white px-1 text-center break-words">
+                            {overlay.id}
+                          </span>
+                        </div>
+
+                        {/* Controls (only in select mode) */}
+                        {isSelected && drawingTool === 'select' && (
+                          <>
+                            {/* Resize Handles */}
+                            {['nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'].map((handle) => (
+                              <div
+                                key={handle}
+                                onMouseDown={(e) => handleResizeStart(overlay.id, handle, e)}
+                                className={`resize-handle absolute w-3 h-3 bg-primary dark:bg-electric-cyan border border-white rounded-full cursor-${handle}-resize`}
+                                style={{
+                                  ...(handle.includes('n') && { top: '-6px' }),
+                                  ...(handle.includes('s') && { bottom: '-6px' }),
+                                  ...(handle.includes('w') && { left: '-6px' }),
+                                  ...(handle.includes('e') && { right: '-6px' }),
+                                  ...(handle === 'n' && { left: '50%', transform: 'translateX(-50%)' }),
+                                  ...(handle === 's' && { left: '50%', transform: 'translateX(-50%)' }),
+                                  ...(handle === 'w' && { top: '50%', transform: 'translateY(-50%)' }),
+                                  ...(handle === 'e' && { top: '50%', transform: 'translateY(-50%)' }),
+                                }}
+                              />
+                            ))}
+
+                            {/* Rotation Handle */}
+                            <div
+                              onMouseDown={(e) => handleRotationStart(overlay.id, e)}
+                              className="rotate-handle absolute w-6 h-6 bg-blue-500 border-2 border-white rounded-full cursor-grab flex items-center justify-center"
+                              style={{
+                                top: '-30px',
+                                left: '50%',
+                                transform: 'translateX(-50%)',
+                              }}
+                              title="Rotate"
+                            >
+                              <RotateCw className="w-3 h-3 text-white" />
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="absolute -top-8 -left-2 flex gap-1">
+                              {/* Convert to Polygon */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  convertToPolygon(overlay.id);
+                                }}
+                                className="p-1 bg-purple-500 text-white rounded-full hover:bg-purple-600 transition-colors"
+                                title="Convert to Polygon"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                              </button>
+
+                              {/* Delete Button */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteOverlay(overlay.id);
+                                }}
+                                className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                {/* Polygon Drawing Preview */}
+                {isDrawingPolygon && polygonPoints.length > 0 && (
+                  <svg
+                    className="absolute inset-0 pointer-events-none"
+                    style={{ width: '100%', height: '100%' }}
+                  >
+                    {/* Draw lines between points */}
+                    {polygonPoints.map((point, idx) => {
+                      if (idx === 0) return null;
+                      const prevPoint = polygonPoints[idx - 1];
+                      return (
+                        <line
+                          key={idx}
+                          x1={prevPoint.x}
+                          y1={prevPoint.y}
+                          x2={point.x}
+                          y2={point.y}
+                          stroke="#3b82f6"
+                          strokeWidth="2"
+                          strokeDasharray="4"
+                        />
+                      );
+                    })}
+                    {/* Draw points */}
+                    {polygonPoints.map((point, idx) => (
+                      <circle
+                        key={idx}
+                        cx={point.x}
+                        cy={point.y}
+                        r="5"
+                        fill="#3b82f6"
+                        stroke="white"
+                        strokeWidth="2"
+                      />
+                    ))}
+                    {/* Close preview line to first point if we have more than 2 points */}
+                    {polygonPoints.length > 2 && (
+                      <line
+                        x1={polygonPoints[polygonPoints.length - 1].x}
+                        y1={polygonPoints[polygonPoints.length - 1].y}
+                        x2={polygonPoints[0].x}
+                        y2={polygonPoints[0].y}
+                        stroke="#3b82f6"
+                        strokeWidth="2"
+                        strokeDasharray="4"
+                        opacity="0.5"
+                      />
+                    )}
+                  </svg>
+                )}
                 </div>
               </div>
 
