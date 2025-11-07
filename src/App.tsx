@@ -10,6 +10,7 @@ import { exportToExcel, exportToJSON } from './utils/export.utils';
 import { importFromJSON, importFromExcel } from './utils/import.utils';
 
 // Form imports
+import { LandingPage } from './components/pages/LandingPage';
 import { OrgForm } from './components/forms/OrgForm';
 import { InterfacesForm } from './components/forms/InterfacesForm';
 import { InteractiveMapsForm } from './components/forms/InteractiveMapsForm';
@@ -31,6 +32,7 @@ import { VisitorKioskInductionForm } from './components/forms/VisitorKioskInduct
 
 const App = () => {
   const activeTab = useBuildSheetStore((state) => state.activeTab);
+  const org = useBuildSheetStore((state) => state.org);
   const exportData = useBuildSheetStore((state) => state.exportData);
   const importData = useBuildSheetStore((state) => state.importData);
   const clearAll = useBuildSheetStore((state) => state.clearAll);
@@ -39,6 +41,9 @@ const App = () => {
   const [showClearModal, setShowClearModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Show landing page for new users who haven't started building yet
+  const showLandingPage = org.organizationName === '' && org.buildings.length === 0;
 
   const handleExportExcel = () => {
     const data = exportData();
@@ -153,21 +158,29 @@ const App = () => {
           onSave={handleSave}
         />
 
-        <TabNavigation />
-
-        <div className="container mx-auto px-6 py-8">
-          <div className="mb-8 animate-slide-down">
-            <ProgressIndicator
-              progress={overallCompletion}
-              label="Overall Completion"
-              showPercentage
-            />
+        {showLandingPage ? (
+          <div className="container mx-auto px-6 py-8">
+            <LandingPage />
           </div>
+        ) : (
+          <>
+            <TabNavigation />
 
-          <div className="glass-strong rounded-2xl shadow-glass dark:shadow-glass-dark border border-primary/10 dark:border-electric-cyan/10 p-8 animate-fade-in">
-            {renderForm()}
-          </div>
-        </div>
+            <div className="container mx-auto px-6 py-8">
+              <div className="mb-8 animate-slide-down">
+                <ProgressIndicator
+                  progress={overallCompletion}
+                  label="Overall Completion"
+                  showPercentage
+                />
+              </div>
+
+              <div className="glass-strong rounded-2xl shadow-glass dark:shadow-glass-dark border border-primary/10 dark:border-electric-cyan/10 p-8 animate-fade-in">
+                {renderForm()}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Clear Confirmation Modal */}
         <Modal
