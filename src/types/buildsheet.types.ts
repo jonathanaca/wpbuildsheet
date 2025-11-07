@@ -46,13 +46,31 @@ export interface MapOverlay {
   visible?: boolean; // Layer visibility (default true)
 }
 
+export type DesignElementType = 'text' | 'desk-icon' | 'chair-icon' | 'toilet-icon' | 'stairs-icon' | 'exit-icon' | 'elevator-icon' | 'plant-icon' | 'table-icon';
+
+export interface DesignElement {
+  id: string; // Unique ID for design element
+  type: DesignElementType;
+  x: number;
+  y: number;
+  rotation: number;
+  // For text elements
+  text?: string;
+  fontSize?: number;
+  fontWeight?: 'normal' | 'bold';
+  // For icon elements
+  size?: number; // Icon size
+  color?: string; // Color for text or icon
+}
+
 export interface FloorPlan {
   building: string;
   level: number;
   fileName: string;
   fileType: 'svg' | 'pdf';
   fileData: string; // Base64 encoded or data URL
-  overlays: MapOverlay[];
+  overlays: MapOverlay[]; // Data mode overlays (rooms, desks, zones)
+  designElements?: DesignElement[]; // Design mode elements (text, icons)
 }
 
 export interface InteractiveMapsData {

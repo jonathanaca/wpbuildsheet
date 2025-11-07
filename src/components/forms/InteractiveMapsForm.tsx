@@ -1,9 +1,16 @@
 import React, { useState, useRef } from 'react';
 import { useBuildSheetStore } from '../../store/buildsheet.store';
 import type { FloorPlan, MapOverlay } from '../../types/buildsheet.types';
+// Design mode types (for future use)
+// import type { DesignElement, DesignElementType } from '../../types/buildsheet.types';
 import { Upload, Download, Trash2, MapPin, Square, Home, ZoomIn, ZoomOut, Maximize2, Eye, EyeOff, RotateCw, Edit3 } from 'lucide-react';
+// Design mode icons (for future use)
+// import { Type, Armchair, DoorOpen, Building2, Table, Laptop } from 'lucide-react';
 
+type EditorMode = 'data' | 'design';
 type SidebarTab = 'zones' | 'rooms' | 'desks';
+// Design tools (for future use)
+// type DesignTool = 'text' | 'desk-icon' | 'chair-icon' | 'toilet-icon' | 'stairs-icon' | 'exit-icon' | 'elevator-icon' | 'plant-icon' | 'table-icon';
 
 export const InteractiveMapsForm: React.FC = () => {
   const org = useBuildSheetStore((state) => state.org);
@@ -17,10 +24,18 @@ export const InteractiveMapsForm: React.FC = () => {
   const addOverlay = useBuildSheetStore((state) => state.addOverlay);
   const updateOverlay = useBuildSheetStore((state) => state.updateOverlay);
   const deleteOverlay = useBuildSheetStore((state) => state.deleteOverlay);
+  // Design mode store methods (for future use)
+  // const addDesignElement = useBuildSheetStore((state) => state.addDesignElement);
+  // const updateDesignElement = useBuildSheetStore((state) => state.updateDesignElement);
+  // const deleteDesignElement = useBuildSheetStore((state) => state.deleteDesignElement);
 
+  const [editorMode, setEditorMode] = useState<EditorMode>('data');
   const [selectedBuilding, setSelectedBuilding] = useState('');
   const [selectedLevel, setSelectedLevel] = useState<number | ''>('');
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('desks');
+  // Design mode state (for future use)
+  // const [selectedDesignTool, setSelectedDesignTool] = useState<DesignTool | null>(null);
+  // const [selectedDesignElement, setSelectedDesignElement] = useState<string | null>(null);
   const [draggedItem, setDraggedItem] = useState<{ id: string; type: 'zone' | 'room' | 'desk' } | null>(null);
   const [selectedOverlay, setSelectedOverlay] = useState<string | null>(null);
   const [isResizing, setIsResizing] = useState(false);
@@ -491,6 +506,39 @@ export const InteractiveMapsForm: React.FC = () => {
             Export SVG
           </button>
         )}
+      </div>
+
+      {/* Mode Switcher */}
+      <div className="glass rounded-xl p-4">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Editor Mode:</span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setEditorMode('data')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                editorMode === 'data'
+                  ? 'bg-gradient-to-r from-primary to-primary/80 dark:from-electric-cyan dark:to-electric-cyan/80 text-white shadow-lg'
+                  : 'bg-gray-100 dark:bg-dark-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-700'
+              }`}
+            >
+              <MapPin className="w-4 h-4" />
+              Data Mode
+              <span className="text-xs opacity-75">(Zones, Rooms, Desks)</span>
+            </button>
+            <button
+              onClick={() => setEditorMode('design')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                editorMode === 'design'
+                  ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg'
+                  : 'bg-gray-100 dark:bg-dark-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-700'
+              }`}
+            >
+              <Edit3 className="w-4 h-4" />
+              Design Mode
+              <span className="text-xs opacity-75">(Text, Icons, SVG Editing)</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Selection Controls */}

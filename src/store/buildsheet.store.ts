@@ -7,6 +7,7 @@ import type {
   InteractiveMapsData,
   FloorPlan,
   MapOverlay,
+  DesignElement,
   ZonesDataArray,
   IntegrationsDataArray,
   UserRequirementsDataArray,
@@ -41,6 +42,9 @@ interface BuildSheetStore extends BuildSheetState {
   addOverlay: (building: string, level: number, overlay: MapOverlay) => void;
   updateOverlay: (building: string, level: number, overlayId: string, overlay: MapOverlay) => void;
   deleteOverlay: (building: string, level: number, overlayId: string) => void;
+  addDesignElement: (building: string, level: number, element: DesignElement) => void;
+  updateDesignElement: (building: string, level: number, elementId: string, element: DesignElement) => void;
+  deleteDesignElement: (building: string, level: number, elementId: string) => void;
   updateZones: (data: ZonesDataArray) => void;
   setZones: (data: ZonesDataArray) => void;
   updateIntegrations: (data: IntegrationsDataArray) => void;
@@ -247,6 +251,42 @@ export const useBuildSheetStore = create<BuildSheetStore>()(
           floorPlans: state.interactiveMaps.floorPlans.map((fp) =>
             fp.building === building && fp.level === level
               ? { ...fp, overlays: fp.overlays.filter((o) => o.id !== overlayId) }
+              : fp
+          ),
+        },
+      })),
+
+      addDesignElement: (building: string, level: number, element: DesignElement) => set((state) => ({
+        interactiveMaps: {
+          ...state.interactiveMaps,
+          floorPlans: state.interactiveMaps.floorPlans.map((fp) =>
+            fp.building === building && fp.level === level
+              ? { ...fp, designElements: [...(fp.designElements || []), element] }
+              : fp
+          ),
+        },
+      })),
+
+      updateDesignElement: (building: string, level: number, elementId: string, element: DesignElement) => set((state) => ({
+        interactiveMaps: {
+          ...state.interactiveMaps,
+          floorPlans: state.interactiveMaps.floorPlans.map((fp) =>
+            fp.building === building && fp.level === level
+              ? {
+                  ...fp,
+                  designElements: (fp.designElements || []).map((e) => (e.id === elementId ? element : e)),
+                }
+              : fp
+          ),
+        },
+      })),
+
+      deleteDesignElement: (building: string, level: number, elementId: string) => set((state) => ({
+        interactiveMaps: {
+          ...state.interactiveMaps,
+          floorPlans: state.interactiveMaps.floorPlans.map((fp) =>
+            fp.building === building && fp.level === level
+              ? { ...fp, designElements: (fp.designElements || []).filter((e) => e.id !== elementId) }
               : fp
           ),
         },
