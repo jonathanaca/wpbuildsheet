@@ -21,6 +21,7 @@ export const InteractiveMapsForm: React.FC = () => {
   const addDesignElement = useBuildSheetStore((state) => state.addDesignElement);
   const updateDesignElement = useBuildSheetStore((state) => state.updateDesignElement);
   const deleteDesignElement = useBuildSheetStore((state) => state.deleteDesignElement);
+  const deleteSvgElement = useBuildSheetStore((state) => state.deleteSvgElement);
 
   const [editorMode, setEditorMode] = useState<EditorMode>('data');
   const [selectedBuilding, setSelectedBuilding] = useState('');
@@ -30,6 +31,7 @@ export const InteractiveMapsForm: React.FC = () => {
   const [selectedDesignElement, setSelectedDesignElement] = useState<string | null>(null);
   const [isEditingText, setIsEditingText] = useState(false);
   const [textInput, setTextInput] = useState('');
+  const [selectedSvgElement, setSelectedSvgElement] = useState<string | null>(null);
   const [draggedItem, setDraggedItem] = useState<{ id: string; type: 'zone' | 'room' | 'desk' } | null>(null);
   const [selectedOverlay, setSelectedOverlay] = useState<string | null>(null);
   const [isResizing, setIsResizing] = useState(false);
@@ -95,9 +97,18 @@ export const InteractiveMapsForm: React.FC = () => {
         overlays: [],
       };
 
+      // Parse SVG content for editing if it's an SVG file
+      if (fileType === 'svg') {
+        const base64Data = fileData.split(',')[1];
+        const svgContent = atob(base64Data);
+        newFloorPlan.svgContent = svgContent;
+        newFloorPlan.deletedSvgElements = [];
+      }
+
       if (currentFloorPlan) {
-        // Keep existing overlays when updating floor plan
+        // Keep existing overlays and design elements when updating floor plan
         newFloorPlan.overlays = currentFloorPlan.overlays;
+        newFloorPlan.designElements = currentFloorPlan.designElements;
         updateFloorPlan(selectedBuilding, selectedLevel as number, newFloorPlan);
       } else {
         addFloorPlan(newFloorPlan);
@@ -496,6 +507,16 @@ export const InteractiveMapsForm: React.FC = () => {
     const svgDoc = parser.parseFromString(svgContent, 'image/svg+xml');
     const svgElement = svgDoc.documentElement;
 
+    // Remove deleted SVG elements if any
+    if (currentFloorPlan.deletedSvgElements && currentFloorPlan.deletedSvgElements.length > 0) {
+      currentFloorPlan.deletedSvgElements.forEach((elementId) => {
+        const element = svgDoc.getElementById(elementId);
+        if (element && element.parentNode) {
+          element.parentNode.removeChild(element);
+        }
+      });
+    }
+
     // Add overlays group
     const overlaysGroup = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'g');
     overlaysGroup.setAttribute('id', 'placeos-overlays');
@@ -581,6 +602,59 @@ export const InteractiveMapsForm: React.FC = () => {
     });
 
     svgElement.appendChild(overlaysGroup);
+
+    // Add design elements group if any
+    if (currentFloorPlan.designElements && currentFloorPlan.designElements.length > 0) {
+      const designGroup = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'g');
+      designGroup.setAttribute('id', 'design-elements');
+
+      currentFloorPlan.designElements.forEach((element) => {
+        if (element.type === 'text') {
+          // Text element
+          const text = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', element.x.toString());
+          text.setAttribute('y', element.y.toString());
+          text.setAttribute('font-size', (element.fontSize || 16).toString());
+          text.setAttribute('font-weight', element.fontWeight || 'normal');
+          text.setAttribute('fill', element.color || '#333333');
+          if (element.rotation && element.rotation !== 0) {
+            text.setAttribute('transform', `rotate(${element.rotation} ${element.x} ${element.y})`);
+          }
+          text.textContent = element.text || '';
+          designGroup.appendChild(text);
+        } else {
+          // Icon element - export as circle with text label for now
+          // In a production app, you'd want to embed proper icon SVGs
+          const group = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'g');
+          const iconSize = element.size || 24;
+
+          const circle = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          circle.setAttribute('cx', element.x.toString());
+          circle.setAttribute('cy', element.y.toString());
+          circle.setAttribute('r', (iconSize / 2).toString());
+          circle.setAttribute('fill', element.color || '#333333');
+          circle.setAttribute('opacity', '0.3');
+
+          const text = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', element.x.toString());
+          text.setAttribute('y', (element.y + 4).toString());
+          text.setAttribute('text-anchor', 'middle');
+          text.setAttribute('font-size', '10');
+          text.setAttribute('fill', '#000');
+          text.textContent = element.type.replace('-icon', '').toUpperCase();
+
+          if (element.rotation && element.rotation !== 0) {
+            group.setAttribute('transform', `rotate(${element.rotation} ${element.x} ${element.y})`);
+          }
+
+          group.appendChild(circle);
+          group.appendChild(text);
+          designGroup.appendChild(group);
+        }
+      });
+
+      svgElement.appendChild(designGroup);
+    }
 
     // Serialize and download
     const serializer = new XMLSerializer();
@@ -829,11 +903,67 @@ export const InteractiveMapsForm: React.FC = () => {
                 >
                 {/* Floor Plan Background */}
                 {currentFloorPlan.fileType === 'svg' ? (
-                  <img
-                    src={currentFloorPlan.fileData}
-                    alt="Floor Plan"
-                    className="absolute inset-0 w-full h-full object-contain pointer-events-none"
-                  />
+                  editorMode === 'design' && currentFloorPlan.svgContent ? (
+                    // Editable SVG in Design Mode
+                    <>
+                      <style dangerouslySetInnerHTML={{
+                        __html: `
+                          ${(currentFloorPlan.deletedSvgElements || []).map(id => `#${id} { display: none !important; }`).join('\n')}
+                          ${selectedSvgElement ? `#${selectedSvgElement} { stroke: #a855f7 !important; stroke-width: 3 !important; filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.5)); cursor: pointer; }` : ''}
+                          svg path, svg rect, svg circle, svg ellipse, svg polygon, svg polyline, svg line { cursor: pointer; transition: stroke 0.2s, stroke-width 0.2s; }
+                          svg path:hover, svg rect:hover, svg circle:hover, svg ellipse:hover, svg polygon:hover, svg polyline:hover, svg line:hover { stroke: #c084fc !important; stroke-width: 2 !important; }
+                        `
+                      }} />
+                      <div
+                        className="absolute inset-0 w-full h-full"
+                        dangerouslySetInnerHTML={{
+                          __html: currentFloorPlan.svgContent
+                            .replace(/<svg/, `<svg class="w-full h-full object-contain"`)
+                            // Add IDs to elements that don't have them
+                            .replace(/<(path|rect|circle|ellipse|polygon|polyline|line)(?!\s+id=)/g, (match) => {
+                              const id = `svg-elem-${Math.random().toString(36).substr(2, 9)}`;
+                              return `${match} id="${id}"`;
+                            })
+                        }}
+                        onClick={(e) => {
+                          if (editorMode === 'design') {
+                            const target = e.target as HTMLElement;
+                            // Check if clicked element is an SVG shape
+                            if (['path', 'rect', 'circle', 'ellipse', 'polygon', 'polyline', 'line'].includes(target.tagName.toLowerCase())) {
+                              const elemId = target.getAttribute('id');
+                              if (elemId && !(currentFloorPlan.deletedSvgElements || []).includes(elemId)) {
+                                e.stopPropagation();
+                                setSelectedSvgElement(elemId);
+                              }
+                            }
+                          }
+                        }}
+                      />
+                      {/* Delete Button for Selected SVG Element */}
+                      {selectedSvgElement && (
+                        <div className="fixed top-24 right-8 z-50 glass rounded-lg p-3 border-2 border-purple-500 shadow-lg">
+                          <p className="text-sm mb-2 font-medium">SVG Element Selected</p>
+                          <button
+                            onClick={() => {
+                              deleteSvgElement(selectedBuilding, selectedLevel as number, selectedSvgElement);
+                              setSelectedSvgElement(null);
+                            }}
+                            className="w-full px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center gap-2 justify-center"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Delete Element
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    // Static SVG image
+                    <img
+                      src={currentFloorPlan.fileData}
+                      alt="Floor Plan"
+                      className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                    />
+                  )
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center text-gray-400">
                     <div className="text-center">
@@ -1211,12 +1341,29 @@ export const InteractiveMapsForm: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* SVG Editing Section */}
+                  {currentFloorPlan && currentFloorPlan.fileType === 'svg' && currentFloorPlan.svgContent && (
+                    <div className="mt-6">
+                      <h4 className="text-sm font-medium mb-2">SVG Editing</h4>
+                      <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
+                        <p className="text-xs text-orange-700 dark:text-orange-300 mb-2">
+                          <strong>Click SVG elements</strong> on the floor plan to select and delete them.
+                        </p>
+                        <p className="text-xs text-orange-600 dark:text-orange-400">
+                          {(currentFloorPlan.deletedSvgElements || []).length > 0
+                            ? `${(currentFloorPlan.deletedSvgElements || []).length} element(s) deleted`
+                            : 'No elements deleted yet'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Instructions */}
                   <div className="mt-4 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
                     <p className="text-xs text-purple-700 dark:text-purple-300">
                       {selectedDesignTool
                         ? 'Click on the map to place the selected tool'
-                        : 'Select a tool above to start designing'}
+                        : 'Select a tool above, or click SVG elements to edit the floor plan'}
                     </p>
                   </div>
                 </>

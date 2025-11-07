@@ -45,6 +45,7 @@ interface BuildSheetStore extends BuildSheetState {
   addDesignElement: (building: string, level: number, element: DesignElement) => void;
   updateDesignElement: (building: string, level: number, elementId: string, element: DesignElement) => void;
   deleteDesignElement: (building: string, level: number, elementId: string) => void;
+  deleteSvgElement: (building: string, level: number, elementId: string) => void;
   updateZones: (data: ZonesDataArray) => void;
   setZones: (data: ZonesDataArray) => void;
   updateIntegrations: (data: IntegrationsDataArray) => void;
@@ -287,6 +288,20 @@ export const useBuildSheetStore = create<BuildSheetStore>()(
           floorPlans: state.interactiveMaps.floorPlans.map((fp) =>
             fp.building === building && fp.level === level
               ? { ...fp, designElements: (fp.designElements || []).filter((e) => e.id !== elementId) }
+              : fp
+          ),
+        },
+      })),
+
+      deleteSvgElement: (building: string, level: number, elementId: string) => set((state) => ({
+        interactiveMaps: {
+          ...state.interactiveMaps,
+          floorPlans: state.interactiveMaps.floorPlans.map((fp) =>
+            fp.building === building && fp.level === level
+              ? {
+                  ...fp,
+                  deletedSvgElements: [...(fp.deletedSvgElements || []), elementId]
+                }
               : fp
           ),
         },

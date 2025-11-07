@@ -71,6 +71,8 @@ export interface FloorPlan {
   fileData: string; // Base64 encoded or data URL
   overlays: MapOverlay[]; // Data mode overlays (rooms, desks, zones)
   designElements?: DesignElement[]; // Design mode elements (text, icons)
+  svgContent?: string; // Parsed SVG content for editing
+  deletedSvgElements?: string[]; // IDs of deleted SVG elements
 }
 
 export interface InteractiveMapsData {
