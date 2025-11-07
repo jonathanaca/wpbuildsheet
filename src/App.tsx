@@ -40,10 +40,11 @@ const App = () => {
 
   const [showClearModal, setShowClearModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Show landing page for new users who haven't started building yet
-  const showLandingPage = org.organizationName === '' && org.buildings.length === 0;
+  const showLandingPage = !hasStarted && org.organizationName === '' && org.buildings.length === 0;
 
   const handleExportExcel = () => {
     const data = exportData();
@@ -160,7 +161,9 @@ const App = () => {
 
         {showLandingPage ? (
           <div className="container mx-auto px-6 py-8">
-            <LandingPage />
+            <div onClick={() => setHasStarted(true)}>
+              <LandingPage />
+            </div>
           </div>
         ) : (
           <>

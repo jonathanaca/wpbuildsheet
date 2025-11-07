@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useBuildSheetStore } from '../../store/buildsheet.store';
 import type { FloorPlan, MapOverlay } from '../../types/buildsheet.types';
-import { Upload, Download, Trash2, MapPin, Square, Home } from 'lucide-react';
+import { Upload, Download, Trash2, MapPin, Square, Home, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 
 type SidebarTab = 'zones' | 'rooms' | 'desks';
 
@@ -24,7 +24,12 @@ export const InteractiveMapsForm: React.FC = () => {
   const [draggedItem, setDraggedItem] = useState<{ id: string; type: 'zone' | 'room' | 'desk' } | null>(null);
   const [selectedOverlay, setSelectedOverlay] = useState<string | null>(null);
   const [isResizing, setIsResizing] = useState(false);
+  const [isDraggingOverlay, setIsDraggingOverlay] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<string>('');
+  const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
+
+  // Zoom state
+  const [zoom, setZoom] = useState(1);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -116,10 +121,35 @@ export const InteractiveMapsForm: React.FC = () => {
     setDraggedItem(null);
   };
 
-  // Handle overlay selection
+  // Zoom controls
+  const handleZoomIn = () => {
+    setZoom((prev) => Math.min(prev + 0.25, 3));
+  };
+
+  const handleZoomOut = () => {
+    setZoom((prev) => Math.max(prev - 0.25, 0.25));
+  };
+
+  const handleResetZoom = () => {
+    setZoom(1);
+  };
+
+  // Handle overlay selection and drag start
   const handleOverlayClick = (overlayId: string, event: React.MouseEvent) => {
     event.stopPropagation();
     setSelectedOverlay(overlayId);
+  };
+
+  const handleOverlayDragStart = (overlayId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setSelectedOverlay(overlayId);
+    setIsDraggingOverlay(true);
+
+    if (!canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / zoom;
+    const y = (event.clientY - rect.top) / zoom;
+    setDragStartPos({ x, y });
   };
 
   // Handle overlay deletion
@@ -137,16 +167,35 @@ export const InteractiveMapsForm: React.FC = () => {
     setResizeHandle(handle);
   };
 
-  // Handle mouse move for resizing
+  // Handle mouse move for resizing and dragging
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!isResizing || !selectedOverlay || !currentFloorPlan || !canvasRef.current) return;
+    if (!selectedOverlay || !currentFloorPlan || !canvasRef.current) return;
 
     const overlay = currentFloorPlan.overlays.find((o) => o.id === selectedOverlay);
     if (!overlay) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const mouseX = event.clientX - rect.left;
-    const mouseY = event.clientY - rect.top;
+    const mouseX = (event.clientX - rect.left) / zoom;
+    const mouseY = (event.clientY - rect.top) / zoom;
+
+    // Handle dragging overlay
+    if (isDraggingOverlay && dragStartPos) {
+      const deltaX = mouseX - dragStartPos.x;
+      const deltaY = mouseY - dragStartPos.y;
+
+      const updatedOverlay: MapOverlay = {
+        ...overlay,
+        x: overlay.x + deltaX,
+        y: overlay.y + deltaY,
+      };
+
+      updateOverlay(selectedBuilding, selectedLevel as number, selectedOverlay, updatedOverlay);
+      setDragStartPos({ x: mouseX, y: mouseY });
+      return;
+    }
+
+    // Handle resizing
+    if (!isResizing) return;
 
     let newWidth = overlay.width;
     let newHeight = overlay.height;
@@ -182,10 +231,12 @@ export const InteractiveMapsForm: React.FC = () => {
     updateOverlay(selectedBuilding, selectedLevel as number, selectedOverlay, updatedOverlay);
   };
 
-  // Handle mouse up to stop resizing
+  // Handle mouse up to stop resizing and dragging
   const handleMouseUp = () => {
     setIsResizing(false);
+    setIsDraggingOverlay(false);
     setResizeHandle('');
+    setDragStartPos(null);
   };
 
   // Handle export to SVG
@@ -360,6 +411,38 @@ export const InteractiveMapsForm: React.FC = () => {
           {/* Canvas Area */}
           <div className="col-span-12 lg:col-span-8">
             <div className="glass rounded-xl p-4">
+              {/* Zoom Controls */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleZoomOut}
+                    disabled={zoom <= 0.25}
+                    className="p-2 bg-white dark:bg-dark-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Zoom Out"
+                  >
+                    <ZoomOut className="w-4 h-4" />
+                  </button>
+                  <span className="text-sm font-medium px-3 py-1 bg-white dark:bg-dark-800 border border-gray-300 dark:border-gray-600 rounded-lg min-w-[70px] text-center">
+                    {Math.round(zoom * 100)}%
+                  </span>
+                  <button
+                    onClick={handleZoomIn}
+                    disabled={zoom >= 3}
+                    className="p-2 bg-white dark:bg-dark-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Zoom In"
+                  >
+                    <ZoomIn className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={handleResetZoom}
+                    className="p-2 bg-white dark:bg-dark-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-700 transition-colors"
+                    title="Reset Zoom"
+                  >
+                    <Maximize2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
               <div
                 ref={canvasRef}
                 onDrop={handleDrop}
@@ -367,9 +450,21 @@ export const InteractiveMapsForm: React.FC = () => {
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onClick={() => setSelectedOverlay(null)}
-                className="relative w-full bg-white dark:bg-dark-900 rounded-lg overflow-hidden"
-                style={{ minHeight: '600px', cursor: isResizing ? 'nwse-resize' : 'default' }}
+                className="relative w-full bg-white dark:bg-dark-900 rounded-lg overflow-auto"
+                style={{
+                  minHeight: '600px',
+                  cursor: isResizing ? 'nwse-resize' : isDraggingOverlay ? 'grabbing' : 'default'
+                }}
               >
+                <div
+                  className="relative origin-top-left"
+                  style={{
+                    transform: `scale(${zoom})`,
+                    transformOrigin: 'top left',
+                    width: '100%',
+                    minHeight: '600px',
+                  }}
+                >
                 {/* Floor Plan Background */}
                 {currentFloorPlan.fileType === 'svg' ? (
                   <img
@@ -394,7 +489,12 @@ export const InteractiveMapsForm: React.FC = () => {
                     <div
                       key={overlay.id}
                       onClick={(e) => handleOverlayClick(overlay.id, e)}
-                      className={`absolute cursor-move ${
+                      onMouseDown={(e) => {
+                        // Only start dragging if not clicking on a resize handle
+                        if ((e.target as HTMLElement).classList.contains('resize-handle')) return;
+                        handleOverlayDragStart(overlay.id, e);
+                      }}
+                      className={`absolute ${
                         isSelected ? 'ring-2 ring-primary dark:ring-electric-cyan' : ''
                       }`}
                       style={{
@@ -402,6 +502,7 @@ export const InteractiveMapsForm: React.FC = () => {
                         top: `${overlay.y}px`,
                         width: `${overlay.width}px`,
                         height: `${overlay.height}px`,
+                        cursor: isSelected && !isResizing ? 'move' : 'pointer',
                       }}
                     >
                       {/* Overlay Box */}
@@ -426,7 +527,7 @@ export const InteractiveMapsForm: React.FC = () => {
                             <div
                               key={handle}
                               onMouseDown={(e) => handleResizeStart(overlay.id, handle, e)}
-                              className={`absolute w-3 h-3 bg-primary dark:bg-electric-cyan border border-white rounded-full cursor-${handle}-resize`}
+                              className={`resize-handle absolute w-3 h-3 bg-primary dark:bg-electric-cyan border border-white rounded-full cursor-${handle}-resize`}
                               style={{
                                 ...(handle.includes('n') && { top: '-6px' }),
                                 ...(handle.includes('s') && { bottom: '-6px' }),
@@ -455,10 +556,11 @@ export const InteractiveMapsForm: React.FC = () => {
                     </div>
                   );
                 })}
+                </div>
               </div>
 
               <div className="mt-4 text-sm text-gray-500 dark:text-gray-400 text-center">
-                Drag items from the sidebar to place them on the map. Click to select, drag corners to resize.
+                Drag items from the sidebar to place them on the map. Click overlay to select, drag to move, drag corners to resize.
               </div>
             </div>
           </div>
