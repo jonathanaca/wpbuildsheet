@@ -288,7 +288,25 @@ export const InteractiveMapsForm: React.FC = () => {
       return;
     }
 
-    // Place icon
+    // Handle 3D objects with dimensions
+    if (selectedDesignTool === '3d-desk' || selectedDesignTool === '3d-meeting-table') {
+      const newElement: DesignElement = {
+        id: `design-${Date.now()}`,
+        type: selectedDesignTool,
+        x,
+        y,
+        rotation: 0,
+        width: selectedDesignTool === '3d-desk' ? 120 : 200,
+        height: selectedDesignTool === '3d-desk' ? 60 : 120,
+        color: '#8B4513', // Wood color
+        deskId: '', // Empty by default, can be assigned in Data Mode
+      };
+      addDesignElement(selectedBuilding, selectedLevel as number, newElement);
+      setSelectedDesignTool(null);
+      return;
+    }
+
+    // Place regular icon
     const newElement: DesignElement = {
       id: `design-${Date.now()}`,
       type: selectedDesignTool,
@@ -420,6 +438,19 @@ export const InteractiveMapsForm: React.FC = () => {
     const updatedElement: DesignElement = {
       ...element,
       color,
+    };
+
+    updateDesignElement(selectedBuilding, selectedLevel as number, elementId, updatedElement);
+  };
+
+  // Handle desk ID assignment for 3D objects
+  const handleDeskIdChange = (elementId: string, deskId: string) => {
+    const element = currentFloorPlan?.designElements?.find((e) => e.id === elementId);
+    if (!element) return;
+
+    const updatedElement: DesignElement = {
+      ...element,
+      deskId,
     };
 
     updateDesignElement(selectedBuilding, selectedLevel as number, elementId, updatedElement);
@@ -732,74 +763,76 @@ export const InteractiveMapsForm: React.FC = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold gradient-text">Interactive Maps</h2>
-        {currentFloorPlan && (
-          <button
-            onClick={handleExportSVG}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all"
-          >
-            <Download className="w-4 h-4" />
-            Export SVG
-          </button>
-        )}
-      </div>
-
-      {/* Mode Switcher */}
-      <div className="glass rounded-xl p-4">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
-          <div className="flex items-center gap-3 flex-1">
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Editor Mode:</span>
-            <div className="flex gap-2">
+        <div className="flex items-center gap-3">
+          {/* 3D View Toggle */}
+          {currentFloorPlan && (
+            <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-dark-700 rounded-lg">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">View:</span>
               <button
-                onClick={() => setEditorMode('data')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
-                  editorMode === 'data'
-                    ? 'bg-gradient-to-r from-primary to-primary/80 dark:from-electric-cyan dark:to-electric-cyan/80 text-white shadow-lg'
-                    : 'bg-gray-100 dark:bg-dark-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-700'
+                onClick={() => setViewMode('2d')}
+                className={`px-3 py-1.5 rounded-md font-medium transition-all text-sm ${
+                  viewMode === '2d'
+                    ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow'
+                    : 'bg-gray-200 dark:bg-dark-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-dark-500'
                 }`}
               >
-                <MapPin className="w-4 h-4" />
-                Data Mode
-                <span className="text-xs opacity-75">(Zones, Rooms, Desks)</span>
+                2D
               </button>
               <button
-                onClick={() => setEditorMode('design')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
-                  editorMode === 'design'
-                    ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg'
-                    : 'bg-gray-100 dark:bg-dark-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-700'
+                onClick={() => setViewMode('3d')}
+                className={`px-3 py-1.5 rounded-md font-medium transition-all text-sm ${
+                  viewMode === '3d'
+                    ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow'
+                    : 'bg-gray-200 dark:bg-dark-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-dark-500'
                 }`}
               >
-                <Edit3 className="w-4 h-4" />
-                Design Mode
-                <span className="text-xs opacity-75">(Text, Icons, SVG Editing)</span>
+                3D
               </button>
             </div>
-          </div>
+          )}
+          {currentFloorPlan && (
+            <button
+              onClick={handleExportSVG}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all shadow-lg"
+            >
+              <Download className="w-4 h-4" />
+              Export SVG
+            </button>
+          )}
+        </div>
+      </div>
 
-          {/* 3D View Toggle */}
-          <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-dark-700 rounded-lg">
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-400">View:</span>
-            <button
-              onClick={() => setViewMode('2d')}
-              className={`px-3 py-1.5 rounded-md font-medium transition-all text-sm ${
-                viewMode === '2d'
-                  ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow'
-                  : 'bg-gray-200 dark:bg-dark-600 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-dark-500'
-              }`}
-            >
-              2D
-            </button>
-            <button
-              onClick={() => setViewMode('3d')}
-              className={`px-3 py-1.5 rounded-md font-medium transition-all text-sm ${
-                viewMode === '3d'
-                  ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow'
-                  : 'bg-gray-200 dark:bg-dark-600 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-dark-500'
-              }`}
-            >
-              3D
-            </button>
-          </div>
+      {/* Tab-Based Mode Switcher */}
+      <div className="glass rounded-xl p-1">
+        <div className="flex gap-1">
+          <button
+            onClick={() => setEditorMode('data')}
+            className={`flex-1 px-6 py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
+              editorMode === 'data'
+                ? 'bg-gradient-to-r from-primary to-primary/80 dark:from-electric-cyan dark:to-electric-cyan/80 text-white shadow-lg'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700'
+            }`}
+          >
+            <MapPin className="w-5 h-5" />
+            <div className="flex flex-col items-start">
+              <span>Data Mode</span>
+              <span className="text-xs opacity-75">Zones, Rooms, Desks</span>
+            </div>
+          </button>
+          <button
+            onClick={() => setEditorMode('design')}
+            className={`flex-1 px-6 py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
+              editorMode === 'design'
+                ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700'
+            }`}
+          >
+            <Edit3 className="w-5 h-5" />
+            <div className="flex flex-col items-start">
+              <span>Design Mode</span>
+              <span className="text-xs opacity-75">Floor Plan Design & 3D Objects</span>
+            </div>
+          </button>
         </div>
       </div>
 
@@ -808,7 +841,7 @@ export const InteractiveMapsForm: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Building Dropdown */}
           <div>
-            <label className="block text-sm font-medium mb-2">Building</label>
+            <label className="block text-sm font-medium mb-2 text-gray-900 dark:text-gray-100">Building</label>
             <select
               value={selectedBuilding}
               onChange={(e) => {
@@ -828,7 +861,7 @@ export const InteractiveMapsForm: React.FC = () => {
 
           {/* Level Dropdown */}
           <div>
-            <label className="block text-sm font-medium mb-2">Level (Floor)</label>
+            <label className="block text-sm font-medium mb-2 text-gray-900 dark:text-gray-100">Level (Floor)</label>
             <select
               value={selectedLevel}
               onChange={(e) => setSelectedLevel(e.target.value ? parseInt(e.target.value) : '')}
@@ -921,42 +954,44 @@ export const InteractiveMapsForm: React.FC = () => {
                 </div>
 
                 {/* Layer Visibility Toggles */}
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Layers:</span>
-                  <button
-                    onClick={() => toggleLayerVisibility('zones')}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
-                      layersVisible.zones
-                        ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700'
-                        : 'bg-gray-100 dark:bg-dark-800 text-gray-400 border border-gray-300 dark:border-gray-600'
-                    }`}
-                  >
-                    {layersVisible.zones ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                    Zones
-                  </button>
-                  <button
-                    onClick={() => toggleLayerVisibility('rooms')}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
-                      layersVisible.rooms
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
-                        : 'bg-gray-100 dark:bg-dark-800 text-gray-400 border border-gray-300 dark:border-gray-600'
-                    }`}
-                  >
-                    {layersVisible.rooms ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                    Rooms
-                  </button>
-                  <button
-                    onClick={() => toggleLayerVisibility('desks')}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
-                      layersVisible.desks
-                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700'
-                        : 'bg-gray-100 dark:bg-dark-800 text-gray-400 border border-gray-300 dark:border-gray-600'
-                    }`}
-                  >
-                    {layersVisible.desks ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                    Desks
-                  </button>
-                </div>
+                {editorMode === 'data' && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Layers:</span>
+                    <button
+                      onClick={() => toggleLayerVisibility('zones')}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
+                        layersVisible.zones
+                          ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700'
+                          : 'bg-gray-100 dark:bg-dark-800 text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600'
+                      }`}
+                    >
+                      {layersVisible.zones ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                      Zones
+                    </button>
+                    <button
+                      onClick={() => toggleLayerVisibility('rooms')}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
+                        layersVisible.rooms
+                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
+                          : 'bg-gray-100 dark:bg-dark-800 text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600'
+                      }`}
+                    >
+                      {layersVisible.rooms ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                      Rooms
+                    </button>
+                    <button
+                      onClick={() => toggleLayerVisibility('desks')}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
+                        layersVisible.desks
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700'
+                          : 'bg-gray-100 dark:bg-dark-800 text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600'
+                      }`}
+                    >
+                      {layersVisible.desks ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                      Desks
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div
@@ -1336,6 +1371,69 @@ export const InteractiveMapsForm: React.FC = () => {
                     );
                   }
 
+                  // 3D Objects (desks and tables)
+                  if (element.type === '3d-desk' || element.type === '3d-meeting-table') {
+                    return (
+                      <div
+                        key={element.id}
+                        onClick={(e) => handleDesignElementClick(element.id, e)}
+                        onMouseMove={(e) => {
+                          if (e.buttons === 1) handleDesignElementDrag(element.id, e);
+                        }}
+                        className={`absolute cursor-move ${isSelected ? 'ring-2 ring-green-500 rounded-lg' : ''}`}
+                        style={{
+                          left: `${element.x}px`,
+                          top: `${element.y}px`,
+                          width: `${element.width || 120}px`,
+                          height: `${element.height || 60}px`,
+                          transform: viewMode === '3d'
+                            ? `rotate(${element.rotation}deg) translateZ(60px)`
+                            : `rotate(${element.rotation}deg)`,
+                          transformOrigin: 'center',
+                          transformStyle: viewMode === '3d' ? 'preserve-3d' : undefined,
+                        }}
+                      >
+                        {/* 3D Object Box */}
+                        <div
+                          className="w-full h-full rounded border-4 flex items-center justify-center font-medium relative"
+                          style={{
+                            backgroundColor: element.color || '#8B4513',
+                            borderColor: '#654321',
+                            boxShadow: viewMode === '3d'
+                              ? '0 8px 16px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.3)'
+                              : '0 2px 4px rgba(0, 0, 0, 0.2)',
+                          }}
+                        >
+                          <div className="text-center">
+                            <div className="text-white font-bold text-sm mb-1">
+                              {element.type === '3d-desk' ? '🖥️ Desk' : '🪑 Meeting Table'}
+                            </div>
+                            {element.deskId && (
+                              <div className="text-xs bg-white/90 text-gray-900 px-2 py-1 rounded font-semibold">
+                                {element.deskId}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {isSelected && (
+                          <>
+                            {/* Delete button */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteDesignElement(selectedBuilding, selectedLevel as number, element.id);
+                                setSelectedDesignElement(null);
+                              }}
+                              className="absolute -top-8 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    );
+                  }
+
                   // Icon element
                   const isFurniture = ['desk-icon', 'chair-icon', 'table-icon'].includes(element.type);
                   return (
@@ -1407,7 +1505,7 @@ export const InteractiveMapsForm: React.FC = () => {
 
                   {/* Text Tool */}
                   <div className="mb-6">
-                    <h4 className="text-sm font-medium mb-2">Text</h4>
+                    <h4 className="text-sm font-medium mb-2 text-gray-900 dark:text-gray-100">Text</h4>
                     <button
                       onClick={() => {
                         setSelectedDesignTool('text');
@@ -1424,9 +1522,36 @@ export const InteractiveMapsForm: React.FC = () => {
                     </button>
                   </div>
 
+                  {/* 3D Objects - Only show in 3D view */}
+                  {viewMode === '3d' && (
+                    <div className="mb-6">
+                      <h4 className="text-sm font-medium mb-2 text-gray-900 dark:text-gray-100">3D Furniture</h4>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">Add 3D objects that can be assigned desk IDs in Data Mode</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { type: '3d-desk' as DesignElementType, label: '3D Desk', icon: <Square className="w-5 h-5" /> },
+                          { type: '3d-meeting-table' as DesignElementType, label: 'Meeting Table', icon: <Table className="w-5 h-5" /> },
+                        ].map((tool) => (
+                          <button
+                            key={tool.type}
+                            onClick={() => setSelectedDesignTool(tool.type)}
+                            className={`p-3 rounded-lg border-2 transition-all flex flex-col items-center gap-2 ${
+                              selectedDesignTool === tool.type
+                                ? 'bg-green-50 dark:bg-green-900/20 border-green-500 text-gray-900 dark:text-gray-100'
+                                : 'bg-white dark:bg-dark-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 hover:border-green-300'
+                            }`}
+                          >
+                            {tool.icon}
+                            <span className="text-xs">{tool.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Icon Library */}
                   <div>
-                    <h4 className="text-sm font-medium mb-2">Icons</h4>
+                    <h4 className="text-sm font-medium mb-2 text-gray-900 dark:text-gray-100">2D Icons</h4>
                     <div className="grid grid-cols-2 gap-2">
                       {[
                         { type: 'desk-icon' as DesignElementType, label: 'Desk', icon: <Square className="w-5 h-5" /> },
@@ -1443,8 +1568,8 @@ export const InteractiveMapsForm: React.FC = () => {
                           onClick={() => setSelectedDesignTool(tool.type)}
                           className={`p-3 rounded-lg border-2 transition-all flex flex-col items-center gap-2 ${
                             selectedDesignTool === tool.type
-                              ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-500'
-                              : 'bg-white dark:bg-dark-800 border-gray-300 dark:border-gray-600 hover:border-purple-300'
+                              ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-500 text-gray-900 dark:text-gray-100'
+                              : 'bg-white dark:bg-dark-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 hover:border-purple-300'
                           }`}
                         >
                           {tool.icon}
@@ -1457,15 +1582,42 @@ export const InteractiveMapsForm: React.FC = () => {
                   {/* Element Properties */}
                   {selectedDesignElement && currentFloorPlan && currentFloorPlan.designElements && (
                     <div className="mt-6">
-                      <h4 className="text-sm font-medium mb-2">Element Properties</h4>
+                      <h4 className="text-sm font-medium mb-2 text-gray-900 dark:text-gray-100">Element Properties</h4>
                       {(() => {
                         const element = currentFloorPlan.designElements.find((e) => e.id === selectedDesignElement);
                         if (!element) return null;
 
+                        const is3DObject = element.type === '3d-desk' || element.type === '3d-meeting-table';
+
                         return (
-                          <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800 space-y-3">
+                          <div className={`p-3 rounded-lg border space-y-3 ${
+                            is3DObject
+                              ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                              : 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'
+                          }`}>
+                            {/* Desk ID for 3D Objects */}
+                            {is3DObject && (
+                              <div>
+                                <label className="text-xs font-medium text-green-700 dark:text-green-300 block mb-1">
+                                  Assign Desk ID
+                                </label>
+                                <input
+                                  type="text"
+                                  value={element.deskId || ''}
+                                  onChange={(e) => handleDeskIdChange(element.id, e.target.value)}
+                                  placeholder="e.g., Desk-1.01"
+                                  className="w-full px-2 py-1.5 text-sm rounded border border-green-300 dark:border-green-600 bg-white dark:bg-dark-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                                />
+                                <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                                  Link this 3D object to desk data for availability tracking
+                                </p>
+                              </div>
+                            )}
+
                             <div>
-                              <label className="text-xs font-medium text-purple-700 dark:text-purple-300 block mb-1">
+                              <label className={`text-xs font-medium block mb-1 ${
+                                is3DObject ? 'text-green-700 dark:text-green-300' : 'text-purple-700 dark:text-purple-300'
+                              }`}>
                                 Color
                               </label>
                               <div className="flex items-center gap-2">
@@ -1479,17 +1631,29 @@ export const InteractiveMapsForm: React.FC = () => {
                                   type="text"
                                   value={element.color || '#333333'}
                                   onChange={(e) => handleDesignElementColorChange(element.id, e.target.value)}
-                                  className="flex-1 px-2 py-1 text-xs rounded border border-purple-300 dark:border-purple-600 bg-white dark:bg-dark-800"
+                                  className={`flex-1 px-2 py-1 text-xs rounded border bg-white dark:bg-dark-800 text-gray-900 dark:text-gray-100 ${
+                                    is3DObject ? 'border-green-300 dark:border-green-600' : 'border-purple-300 dark:border-purple-600'
+                                  }`}
                                 />
                               </div>
                             </div>
-                            {element.type !== 'text' && (
+                            {element.type !== 'text' && !is3DObject && (
                               <div>
                                 <label className="text-xs font-medium text-purple-700 dark:text-purple-300 block mb-1">
                                   Size: {element.size || 24}px
                                 </label>
                                 <p className="text-xs text-purple-600 dark:text-purple-400">
                                   Drag the resize handle to adjust
+                                </p>
+                              </div>
+                            )}
+                            {is3DObject && (
+                              <div>
+                                <label className="text-xs font-medium text-green-700 dark:text-green-300 block mb-1">
+                                  Dimensions
+                                </label>
+                                <p className="text-xs text-green-600 dark:text-green-400">
+                                  {element.width || 120} × {element.height || 60} px
                                 </p>
                               </div>
                             )}

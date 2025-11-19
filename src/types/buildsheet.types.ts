@@ -46,7 +46,7 @@ export interface MapOverlay {
   visible?: boolean; // Layer visibility (default true)
 }
 
-export type DesignElementType = 'text' | 'desk-icon' | 'chair-icon' | 'toilet-icon' | 'stairs-icon' | 'exit-icon' | 'elevator-icon' | 'plant-icon' | 'table-icon';
+export type DesignElementType = 'text' | 'desk-icon' | 'chair-icon' | 'toilet-icon' | 'stairs-icon' | 'exit-icon' | 'elevator-icon' | 'plant-icon' | 'table-icon' | '3d-desk' | '3d-meeting-table';
 
 export interface DesignElement {
   id: string; // Unique ID for design element
@@ -61,6 +61,10 @@ export interface DesignElement {
   // For icon elements
   size?: number; // Icon size
   color?: string; // Color for text or icon
+  // For 3D objects
+  width?: number; // Width for 3D objects
+  height?: number; // Height for 3D objects
+  deskId?: string; // Assigned desk ID for 3D objects (links to data mode)
 }
 
 export interface FloorPlan {
